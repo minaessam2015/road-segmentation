@@ -220,6 +220,7 @@ class Trainer:
                 config=config_to_dict(self.config),
                 resume="allow",
                 dir=str(self.log_dir),
+                settings=wandb.Settings(init_timeout=180),
             )
             logger.info(f"W&B run: {self.wandb_run.url}")
         except ImportError:
