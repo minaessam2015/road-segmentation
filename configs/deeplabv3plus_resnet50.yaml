@@ -1,0 +1,55 @@
+# =========================================================
+# DeepLabV3+ + ResNet50
+# =========================================================
+# ASPP module captures multi-scale context via dilated convolutions.
+# Good for varying road widths. Heavier than U-Net — needs lower LR.
+# =========================================================
+
+seed: 42
+
+model:
+  arch: "DeepLabV3Plus"
+  encoder_name: "resnet50"
+  encoder_weights: "imagenet"
+
+data:
+  image_size: 512
+  batch_size: 8
+  num_workers: 4
+
+augmentations:
+  train:
+    - name: "HorizontalFlip"
+      params: { p: 0.5 }
+    - name: "VerticalFlip"
+      params: { p: 0.5 }
+    - name: "RandomRotate90"
+      params: { p: 0.5 }
+    - name: "ShiftScaleRotate"
+      params: { shift_limit: 0.1, scale_limit: 0.15, rotate_limit: 45, border_mode: 4, p: 0.5 }
+    - name: "RandomBrightnessContrast"
+      params: { brightness_limit: 0.2, contrast_limit: 0.2, p: 0.3 }
+    - name: "HueSaturationValue"
+      params: { hue_shift_limit: 10, sat_shift_limit: 20, val_shift_limit: 15, p: 0.3 }
+
+loss:
+  type: "bce_dice"
+  params:
+    bce_weight: 0.5
+    dice_weight: 0.5
+
+optimizer:
+  type: "adamw"
+  lr: 5.0e-4
+  weight_decay: 1.0e-4
+
+scheduler:
+  type: "cosine"
+  params:
+    eta_min: 1.0e-6
+
+training:
+  epochs: 50
+  early_stopping_patience: 10
+  freeze_encoder_epochs: 3
+  encoder_lr_factor: 0.1

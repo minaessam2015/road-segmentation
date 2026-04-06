@@ -1,0 +1,55 @@
+# =========================================================
+# SegFormer + MIT-B2 — Transformer Architecture
+# =========================================================
+# Self-attention captures long-range road connectivity.
+# Needs lower LR, smaller batch, no encoder freezing.
+# More memory-hungry — use grad accumulation if needed.
+# =========================================================
+
+seed: 42
+
+model:
+  arch: "Segformer"
+  encoder_name: "mit_b2"
+  encoder_weights: "imagenet"
+
+data:
+  image_size: 512
+  batch_size: 4
+  num_workers: 4
+
+augmentations:
+  train:
+    - name: "HorizontalFlip"
+      params: { p: 0.5 }
+    - name: "VerticalFlip"
+      params: { p: 0.5 }
+    - name: "RandomRotate90"
+      params: { p: 0.5 }
+    - name: "ShiftScaleRotate"
+      params: { shift_limit: 0.1, scale_limit: 0.15, rotate_limit: 45, border_mode: 4, p: 0.5 }
+    - name: "RandomBrightnessContrast"
+      params: { brightness_limit: 0.2, contrast_limit: 0.2, p: 0.3 }
+
+loss:
+  type: "bce_dice"
+  params:
+    bce_weight: 0.5
+    dice_weight: 0.5
+
+optimizer:
+  type: "adamw"
+  lr: 6.0e-5
+  weight_decay: 0.01
+
+scheduler:
+  type: "cosine"
+  params:
+    eta_min: 1.0e-7
+
+training:
+  epochs: 50
+  early_stopping_patience: 15
+  freeze_encoder_epochs: 0
+  encoder_lr_factor: 1.0
+  grad_accumulation_steps: 2

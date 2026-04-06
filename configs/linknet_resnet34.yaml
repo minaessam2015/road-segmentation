@@ -1,0 +1,47 @@
+# =========================================================
+# LinkNet + ResNet34 — Closest to D-LinkNet
+# =========================================================
+# LinkNet uses addition-based skip connections (lighter than
+# U-Net's concatenation). Fastest decoder. Can afford larger batch.
+# =========================================================
+
+seed: 42
+
+model:
+  arch: "Linknet"
+  encoder_name: "resnet34"
+  encoder_weights: "imagenet"
+
+data:
+  image_size: 512
+  batch_size: 16
+  num_workers: 4
+
+augmentations:
+  train:
+    - name: "HorizontalFlip"
+      params: { p: 0.5 }
+    - name: "VerticalFlip"
+      params: { p: 0.5 }
+    - name: "RandomRotate90"
+      params: { p: 0.5 }
+    - name: "ShiftScaleRotate"
+      params: { shift_limit: 0.1, scale_limit: 0.15, rotate_limit: 45, border_mode: 4, p: 0.5 }
+    - name: "RandomBrightnessContrast"
+      params: { brightness_limit: 0.2, contrast_limit: 0.2, p: 0.3 }
+
+loss:
+  type: "bce_dice"
+  params:
+    bce_weight: 0.5
+    dice_weight: 0.5
+
+optimizer:
+  type: "adamw"
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+
+training:
+  epochs: 50
+  freeze_encoder_epochs: 5
+  encoder_lr_factor: 0.1
