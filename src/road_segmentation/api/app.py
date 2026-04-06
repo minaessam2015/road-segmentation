@@ -4,6 +4,7 @@ Endpoints:
     POST /api/v1/segment  — accepts a satellite image, returns road mask + metadata
     GET  /health           — health check
     GET  /api/v1/model-info — model version and configuration
+    GET  /metrics           — Prometheus-compatible metrics
     GET  /results/{filename} — serve saved result masks
 """
 
@@ -18,8 +19,8 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
@@ -90,10 +91,21 @@ def create_app(
     # --- Mount static files for result images ---
     app.mount("/results", StaticFiles(directory=str(_results_dir)), name="results")
 
+    # --- Observability middleware ---
+    from road_segmentation.api.observability import (
+        RequestIDMiddleware,
+        RequestLoggingMiddleware,
+        setup_structured_logging,
+    )
+    setup_structured_logging()
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(RequestIDMiddleware)
+
     # --- Register routes ---
     app.add_api_route("/health", health, methods=["GET"])
     app.add_api_route("/api/v1/model-info", model_info, methods=["GET"])
     app.add_api_route("/api/v1/segment", segment, methods=["POST"])
+    app.add_api_route("/metrics", prometheus_metrics, methods=["GET"])
 
     logger.info(f"API ready. Model: {_model_info}")
     return app
@@ -105,16 +117,35 @@ def create_app(
 
 
 async def health():
-    """Health check endpoint."""
-    return {
+    """Health check with system details."""
+    import shutil
+    disk = shutil.disk_usage(_results_dir)
+    info = {
         "status": "healthy" if _engine is not None else "degraded",
         "model_loaded": _engine is not None,
+        "disk_free_gb": round(disk.free / 1e9, 1),
     }
+    try:
+        import torch
+        if torch.cuda.is_available():
+            info["gpu"] = torch.cuda.get_device_name(0)
+            info["gpu_memory_free_gb"] = round(
+                (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / 1e9, 1
+            )
+    except Exception:
+        pass
+    return info
 
 
 async def model_info():
     """Return model version and configuration."""
     return _model_info
+
+
+async def prometheus_metrics():
+    """Prometheus-compatible metrics endpoint."""
+    from road_segmentation.api.observability import metrics
+    return PlainTextResponse(metrics.to_prometheus(), media_type="text/plain")
 
 
 async def segment(
@@ -202,6 +233,19 @@ async def segment(
     mask_path = _results_dir / mask_filename
     cv2.imwrite(str(mask_path), mask)
 
+    # --- Audit logging ---
+    from road_segmentation.api.observability import compute_image_hash, log_inference
+    log_inference(
+        request_id=result_id,
+        image_hash=compute_image_hash(image_bytes),
+        image_size=original_size,
+        road_coverage_pct=road_coverage_pct,
+        confidence_mean=confidence_mean,
+        inference_time_ms=inference_time_ms,
+        threshold=threshold,
+        model_version=_model_info.get("model_version", "v1.0"),
+    )
+
     # --- Build response ---
     response = {
         "mask_url": f"/results/{mask_filename}",
@@ -212,6 +256,7 @@ async def segment(
             "model_version": _model_info.get("model_version", "v1.0"),
             "inference_time_ms": inference_time_ms,
             "threshold": threshold,
+            "request_id": result_id,
         },
     }
 
