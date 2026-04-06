@@ -19,4 +19,5 @@ computer-vision-task.pdf
 notebooks/*_executed.ipynb
 
 .env
+kaggle.json
 .DS_Store
