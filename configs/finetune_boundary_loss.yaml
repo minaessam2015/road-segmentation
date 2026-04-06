@@ -1,0 +1,97 @@
+# =========================================================
+# Fine-tune with Boundary-Weighted Loss
+# =========================================================
+# Start from a converged U-Net++ + EfficientNet-B4 checkpoint
+# and fine-tune with boundary-weighted BCE+Dice loss.
+#
+# The boundary loss upweights pixels near road edges (weight=5x),
+# targeting the exact pixels where FP/FN errors concentrate.
+# Literature reports +2-5 IoU improvement on road extraction.
+#
+# Usage:
+#   1. First train the base model (unetplusplus_efficientnet_b4_1024.yaml)
+#   2. Set checkpoint.resume_from below to the best checkpoint path
+#   3. Run for 10-15 epochs — the model is already converged,
+#      we're just refining edge predictions
+# =========================================================
+
+seed: 42
+
+model:
+  arch: "UnetPlusPlus"
+  encoder_name: "efficientnet-b4"
+  encoder_weights: "imagenet"
+  in_channels: 3
+  classes: 1
+
+data:
+  image_size: 1024
+  batch_size: 64
+  num_workers: 4
+  pin_memory: true
+  val_split_ratio: 0.15
+  val_split_seed: 42
+
+augmentations:
+  train:
+    - name: "HorizontalFlip"
+      params: { p: 0.5 }
+    - name: "VerticalFlip"
+      params: { p: 0.5 }
+    - name: "RandomRotate90"
+      params: { p: 0.5 }
+    - name: "ShiftScaleRotate"
+      params: { shift_limit: 0.1, scale_limit: 0.15, rotate_limit: 45, border_mode: 4, p: 0.5 }
+    - name: "RandomBrightnessContrast"
+      params: { brightness_limit: 0.2, contrast_limit: 0.2, p: 0.3 }
+    - name: "HueSaturationValue"
+      params: { hue_shift_limit: 10, sat_shift_limit: 20, val_shift_limit: 15, p: 0.3 }
+  val: []
+
+normalization:
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+# The key difference: boundary-weighted loss
+loss:
+  type: "boundary_bce_dice"
+  params:
+    edge_weight: 5.0
+    boundary_width: 3
+    bce_weight: 0.5
+    dice_weight: 0.5
+    smooth: 1.0
+
+optimizer:
+  type: "adamw"
+  lr: 1.0e-4          # Lower LR for fine-tuning (model already converged)
+  weight_decay: 1.0e-4
+
+scheduler:
+  type: "cosine"
+  params:
+    eta_min: 1.0e-6
+
+training:
+  epochs: 15           # Short — just refining edges
+  early_stopping_patience: 7
+  early_stopping_metric: "val_iou"
+  early_stopping_mode: "max"
+  grad_accumulation_steps: 1
+  mixed_precision: true
+  freeze_encoder_epochs: 0   # No freezing — everything is pretrained
+  encoder_lr_factor: 0.5     # Encoder gets half the decoder LR
+
+checkpoint:
+  save_dir: "checkpoints"
+  save_best: true
+  save_last: true
+  resume_from: null    # <-- SET THIS to your base model's best.pth
+
+logging:
+  log_dir: "logs"
+  save_visualizations_every_n_epochs: 3
+  num_visualization_samples: 6
+  tensorboard: false
+  wandb: false
+  save_training_curves: true
