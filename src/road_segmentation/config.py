@@ -110,6 +110,7 @@ class LoggingConfig:
     save_visualizations_every_n_epochs: int = 5
     num_visualization_samples: int = 6
     tensorboard: bool = False
+    wandb: bool = False
     save_training_curves: bool = True
 
 

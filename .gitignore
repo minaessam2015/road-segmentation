@@ -18,4 +18,5 @@ results/
 computer-vision-task.pdf
 notebooks/*_executed.ipynb
 
+.env
 .DS_Store

@@ -91,6 +91,7 @@ class Trainer:
         self._setup_early_stopping()
         self._setup_ema()
         self._setup_tensorboard()
+        self._setup_wandb()
         self.metric_tracker = MetricTracker(threshold=0.5)
 
         # Collect fixed val samples for visualization
@@ -199,6 +200,32 @@ class Trainer:
                 self.tb_writer = SummaryWriter(log_dir=str(self.log_dir / "tensorboard"))
             except ImportError:
                 logger.warning("TensorBoard not installed. Skipping TB logging.")
+
+    def _setup_wandb(self) -> None:
+        self.wandb_run = None
+        if not self.config.logging.wandb:
+            return
+        try:
+            import wandb
+            from road_segmentation.env import get_wandb_config
+
+            wb_cfg = get_wandb_config()
+            if wb_cfg["api_key"]:
+                wandb.login(key=wb_cfg["api_key"])
+
+            self.wandb_run = wandb.init(
+                project=wb_cfg.get("project", "road-segmentation"),
+                entity=wb_cfg.get("entity") or None,
+                name=self.config.logging.experiment_name,
+                config=config_to_dict(self.config),
+                resume="allow",
+                dir=str(self.log_dir),
+            )
+            logger.info(f"W&B run: {self.wandb_run.url}")
+        except ImportError:
+            logger.warning("wandb not installed. Run: pip install wandb")
+        except Exception as e:
+            logger.warning(f"W&B init failed: {e}. Continuing without W&B.")
 
     def _collect_viz_samples(self) -> Optional[Dict[str, torch.Tensor]]:
         """Collect a fixed batch of validation samples for visualization."""
@@ -450,6 +477,12 @@ class Trainer:
                 if key != "epoch" and isinstance(value, (int, float)):
                     self.tb_writer.add_scalar(key, value, epoch)
 
+        # Weights & Biases
+        if self.wandb_run is not None:
+            import wandb
+            log_dict = {k: v for k, v in record.items() if isinstance(v, (int, float))}
+            wandb.log(log_dict, step=epoch)
+
     # ------------------------------------------------------------------
     # Checkpointing
     # ------------------------------------------------------------------
@@ -534,6 +567,15 @@ class Trainer:
 
         if self.tb_writer is not None:
             self.tb_writer.close()
+
+        if self.wandb_run is not None:
+            import wandb
+            # Log best metrics as summary
+            best_summary = self._get_best_metrics()
+            for k, v in best_summary.items():
+                if isinstance(v, (int, float)):
+                    wandb.run.summary[f"best_{k}"] = v
+            wandb.finish()
 
         best = self._get_best_metrics()
         logger.info(

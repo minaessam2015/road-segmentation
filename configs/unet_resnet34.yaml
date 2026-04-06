@@ -81,4 +81,5 @@ logging:
   save_visualizations_every_n_epochs: 5
   num_visualization_samples: 6
   tensorboard: false
+  wandb: false
   save_training_curves: true
