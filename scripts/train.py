@@ -21,7 +21,7 @@ import torch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from road_segmentation.config import ExperimentConfig, apply_overrides, load_config
+from road_segmentation.config import apply_overrides, load_config
 from road_segmentation.data.dataset import create_dataloaders
 from road_segmentation.data.eda import discover_image_mask_pairs
 from road_segmentation.data.split import split_pairs

@@ -10,12 +10,11 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
 import torch
-from PIL import Image
 
 from road_segmentation.models.factory import create_model
 

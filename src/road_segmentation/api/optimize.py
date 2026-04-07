@@ -143,8 +143,8 @@ def convert_onnx_fp16(
     Returns:
         Path to the FP16 ONNX model.
     """
-    from onnxruntime.transformers.float16 import convert_float_to_float16
     import onnx
+    from onnxruntime.transformers.float16 import convert_float_to_float16
 
     onnx_path = Path(onnx_path)
     if output_path is None:
@@ -217,8 +217,9 @@ class ONNXInferenceEngine:
         Returns dict with mask, road_coverage_pct, confidence_mean,
         inference_time_ms, and metadata.
         """
-        import cv2
         import time
+
+        import cv2
 
         t0 = time.time()
 

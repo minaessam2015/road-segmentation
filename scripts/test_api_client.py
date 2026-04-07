@@ -125,9 +125,6 @@ def create_gt_comparison(
     gt_px = gt_mask > 0
     gt_overlay[gt_px] = ((0.6) * gt_overlay[gt_px] + 0.4 * np.array([0, 255, 0])).astype(np.uint8)
 
-    # Pred overlay (red)
-    pred_overlay = create_prediction_overlay(image, pred_mask)
-
     # Error overlay (TP/FP/FN)
     error_overlay = create_error_overlay(image, pred_mask, gt_mask)
 
@@ -304,7 +301,7 @@ def main() -> None:
         print(f"Model: {model_info}")
     except requests.ConnectionError:
         print(f"ERROR: Cannot connect to API at {args.api_url}")
-        print(f"Start the server first: python scripts/serve.py --checkpoint checkpoints/best.pth")
+        print("Start the server first: python scripts/serve.py --checkpoint checkpoints/best.pth")
         sys.exit(1)
 
     args.output.mkdir(parents=True, exist_ok=True)
@@ -316,7 +313,7 @@ def main() -> None:
         image_gt_pairs = [(args.image, args.gt_mask)]
 
     elif args.val_set:
-        print(f"\nLoading validation set (same split as training)...")
+        print("\nLoading validation set (same split as training)...")
         val_pairs = get_val_pairs(args.n)
         image_gt_pairs = val_pairs
         print(f"Selected {len(image_gt_pairs)} validation samples with ground truth")
@@ -364,7 +361,7 @@ def main() -> None:
 
     # Summary
     print(f"\n{'='*60}")
-    print(f"  SUMMARY")
+    print("  SUMMARY")
     print(f"{'='*60}")
     times = [r["metadata"]["inference_time_ms"] for r in all_results]
     coverages = [r["road_coverage_pct"] for r in all_results]

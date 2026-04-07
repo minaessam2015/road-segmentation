@@ -7,7 +7,6 @@ import torch
 
 from road_segmentation.training.losses import (
     BoundaryWeightedBCEDiceLoss,
-    CompoundLoss,
     create_loss,
 )
 

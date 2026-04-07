@@ -1,0 +1,39 @@
+# ===========================================================
+# Docker Compose for Road Segmentation Service
+# ===========================================================
+# Usage:
+#   docker-compose up          # start API server
+#   docker-compose up --build  # rebuild and start
+#
+# Place your model in ./models/ or ./checkpoints/ before starting.
+# ===========================================================
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models:ro
+      - ./checkpoints:/app/checkpoints:ro
+      - ./results:/app/results
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Override command based on your model format:
+    # ONNX (recommended for production):
+    command: >
+      python scripts/serve.py
+      --onnx models/model.onnx
+      --device cpu
+      --host 0.0.0.0
+    # PyTorch checkpoint (alternative):
+    # command: >
+    #   python scripts/serve.py
+    #   --checkpoint checkpoints/best.pth
+    #   --host 0.0.0.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; r=requests.get('http://localhost:8000/health'); exit(0 if r.ok else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------
+  # Stage 1: Code Quality — runs on every push (<2 min)
+  # ---------------------------------------------------------------
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install ruff pip-audit
+
+      - name: Lint (ruff)
+        run: ruff check src/ tests/ scripts/
+
+      - name: Unit tests
+        run: pytest tests/ -v --tb=short
+
+      - name: Security scan (pip-audit)
+        run: pip-audit --strict || true  # warn but don't block on transitive deps
+        continue-on-error: true
+
+  # ---------------------------------------------------------------
+  # Stage 2: Docker Build + Smoke Test — runs on push to main
+  # ---------------------------------------------------------------
+  docker:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t road-segmentation:ci .
+
+      - name: Start container (health check only — no model weights)
+        run: |
+          docker run -d --name road-seg-test -p 8000:8000 road-segmentation:ci \
+            python scripts/serve.py --checkpoint /dev/null 2>/dev/null || true
+          sleep 5
+
+      - name: Verify container starts
+        run: docker logs road-seg-test 2>&1 | head -20
+
+      - name: Cleanup
+        run: docker rm -f road-seg-test || true

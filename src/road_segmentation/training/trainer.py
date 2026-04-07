@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import matplotlib
+
 matplotlib.use("Agg")  # non-interactive backend for saving figures
 import matplotlib.pyplot as plt  # noqa: E402
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -21,7 +21,6 @@ from tqdm import tqdm
 
 from road_segmentation.config import ExperimentConfig, config_to_dict, save_config
 from road_segmentation.models.factory import (
-    freeze_encoder,
     get_decoder_parameters,
     get_encoder_parameters,
     unfreeze_encoder,
@@ -208,6 +207,7 @@ class Trainer:
             return
         try:
             import wandb
+
             from road_segmentation.env import get_wandb_config
 
             wb_cfg = get_wandb_config()
@@ -527,6 +527,7 @@ class Trainer:
         """Generate W&B image logs for prediction samples."""
         try:
             import wandb
+
             from road_segmentation.training.visualization import denormalize_image
 
             eval_model = self.ema.module if self.ema is not None else self.model

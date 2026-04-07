@@ -1,9 +1,8 @@
-from pathlib import Path
 import shutil
+from pathlib import Path
 from typing import Optional
 
 from road_segmentation.paths import DEEPGLOBE_DATASET_DIR, RAW_DATA_DIR
-
 
 DATASET_HANDLE = "balraj98/deepglobe-road-extraction-dataset"
 

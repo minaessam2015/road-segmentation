@@ -38,8 +38,9 @@ def main() -> None:
     load_env()
 
     import csv
-    import yaml
+
     import wandb
+    import yaml
 
     # Load config if available
     config_dict = {}

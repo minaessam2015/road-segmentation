@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
+from road_segmentation.postprocessing.pipeline import (
+    PipelineConfig,
+    ablation_configs,
+    run_pipeline,
+)
 from road_segmentation.postprocessing.steps import (
     apply_threshold,
-    bridge_gaps,
     find_optimal_threshold,
     morphological_close,
     morphological_open,
     remove_small_components,
     skeletonize_mask,
-)
-from road_segmentation.postprocessing.pipeline import (
-    PipelineConfig,
-    ablation_configs,
-    run_pipeline,
 )
 
 

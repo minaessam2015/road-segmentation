@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -33,10 +32,9 @@ def mock_engine():
 @pytest.fixture
 def client(mock_engine, tmp_path):
     """FastAPI test client with mocked model."""
-    from road_segmentation.api.app import create_app
-
     # Patch the engine loading
     import road_segmentation.api.app as app_module
+    from road_segmentation.api.app import create_app
     app_module._engine = mock_engine
     app_module._model_info = {
         "backend": "mock",
