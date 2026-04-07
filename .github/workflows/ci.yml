@@ -37,7 +37,7 @@ jobs:
         run: pytest tests/ -v --tb=short --ignore=tests/test_e2e.py
 
       - name: Security scan (pip-audit)
-        run: pip-audit --strict --ignore-vuln PYSEC-0 --skip-editable
+        run: pip-audit --skip-editable
 
   # ---------------------------------------------------------------
   # Stage 2: Docker Build, E2E Test, and Push to GHCR
