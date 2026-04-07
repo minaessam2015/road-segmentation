@@ -571,7 +571,7 @@ Each artifact stores: the PyTorch checkpoint (for retraining), ONNX FP32/FP16/IN
 
 **For A/B testing**: deploy two model versions behind a traffic-splitting proxy, route a percentage to the new version, and compare IoU on a held-out labeled set. **For rollback**: point the deployment config back to the previous artifact version — the old model is still in the registry.
 
-I have not implemented A/B testing or automated rollback — these would require infrastructure (traffic routing, automated metric comparison) beyond the scope of a take-home.
+I have not implemented A/B testing or automated rollback — these would require infrastructure (traffic routing, automated metric comparison) beyond the scope of this project.
 
 ### Data Drift
 

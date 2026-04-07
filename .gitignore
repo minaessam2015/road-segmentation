@@ -15,7 +15,7 @@ checkpoints/
 logs/
 results/
 
-computer-vision-task.pdf
+
 notebooks/*_executed.ipynb
 
 wandb/

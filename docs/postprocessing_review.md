@@ -6,7 +6,7 @@
 - If you want the best binary mask: threshold tuning, light morphology, and component filtering are the highest-value first steps.
 - If you want a usable centerline or GeoJSON polyline: thresholding + skeletonization + graph cleanup is the standard practical stack.
 - If you want strong connectivity or routing-quality graphs: graph repair methods are more effective than simple mask heuristics.
-- If you want the highest research-level connectivity improvements: learned post-processing or graph-first methods can help, but they are harder to justify in a take-home.
+- If you want the highest research-level connectivity improvements: learned post-processing or graph-first methods can help, but they are harder to justify in a time-boxed project.
 
 ## 1. Main categories of post-processing
 
@@ -212,7 +212,7 @@ This is often more important than morphology if your end goal is GeoJSON.
 
 ### Practical recommendation
 
-For a take-home that returns polylines:
+For a time-boxed project that returns polylines:
 
 1. threshold
 2. skeletonize
@@ -261,7 +261,7 @@ This is much more powerful than pure morphology for repairing occlusions or miss
 
 If the deliverable needs vector output and you want a serious connectivity story, this is the most valuable advanced post-processing idea to borrow.
 
-For a time-boxed take-home, a simplified version is often enough:
+For a time-boxed project, a simplified version is often enough:
 
 - identify dead ends
 - connect only short plausible gaps
@@ -295,7 +295,7 @@ Once the base network is strong, lightweight morphological or graph cleanup ofte
 
 ### Practical recommendation
 
-For a take-home, I would usually skip CRFs unless:
+For a time-boxed project, I would usually skip CRFs unless:
 
 - you already have an implementation ready, or
 - your masks have visibly ragged boundaries but decent connectivity

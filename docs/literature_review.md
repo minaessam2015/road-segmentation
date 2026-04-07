@@ -23,7 +23,7 @@ Road extraction from satellite imagery is harder than generic binary segmentatio
 - topologically constrained
 - often occluded by trees, buildings, shadows, clouds, or low-contrast surfaces
 
-The 2024 survey by Mo et al. is useful for a modern overview of the field. It highlights the same recurring issues: cluttered backgrounds, large road-shape variation, occlusion, and complex topology in dense urban scenes. It also groups work into fully supervised, semi-supervised, and weakly supervised settings. For this take-home, fully supervised segmentation is the right regime.  
+The 2024 survey by Mo et al. is useful for a modern overview of the field. It highlights the same recurring issues: cluttered backgrounds, large road-shape variation, occlusion, and complex topology in dense urban scenes. It also groups work into fully supervised, semi-supervised, and weakly supervised settings. For this project, fully supervised segmentation is the right regime.  
 Source: [Mo et al., 2024](https://www.mdpi.com/1424-8220/24/5/1708)
 
 The 2022 survey by Chen et al. is broader and helpful when you want context beyond optical imagery. It is useful mainly for understanding where the field goes after a mask predictor: graph extraction, multi-source fusion, and 3D/point-cloud variants.  
@@ -33,7 +33,7 @@ Source: [Chen et al., 2022](https://www.sciencedirect.com/science/article/pii/S1
 
 ### DeepGlobe
 
-DeepGlobe is directly relevant because it is the dataset used by the assignment. The DeepGlobe challenge paper reports:
+DeepGlobe is directly relevant because it is the dataset used by this project. The DeepGlobe challenge paper reports:
 
 - RGB imagery
 - 50 cm/pixel resolution
@@ -53,7 +53,7 @@ Sources:
 
 ### Practical implication
 
-For the Hudhud take-home:
+Practically speaking:
 
 - DeepGlobe tells you what to optimize first: binary mask quality.
 - SpaceNet tells you what to discuss in the write-up: a good mask is not always a good road network.
@@ -78,7 +78,7 @@ Two DeepGlobe 2018 workshop papers are especially useful because they are close 
 
 #### Buslaev et al., 2018
 
-This is the cleanest practical baseline for the assignment:
+This is the cleanest practical baseline for this project:
 
 - U-Net family network
 - pretrained ResNet-34 encoder
@@ -102,7 +102,7 @@ Source: [Chen et al., 2018](https://arxiv.org/abs/1802.02611)
 
 ### 3.4 SegFormer and modern transformer encoders
 
-SegFormer is one of the more practical transformer-era architectures for semantic segmentation. It gives you multiscale features with a lightweight decoder and usually better robustness to resolution mismatch than older transformer approaches. For a real product, SegFormer is a credible option. For a 6 to 8 hour take-home, it is only worth it if:
+SegFormer is one of the more practical transformer-era architectures for semantic segmentation. It gives you multiscale features with a lightweight decoder and usually better robustness to resolution mismatch than older transformer approaches. For a real product, SegFormer is a credible option. For a 6 to 8 hour project, it is only worth it if:
 
 - you already know the implementation well, or
 - you use a stable pretrained library implementation
@@ -112,24 +112,24 @@ Source: [Xie et al., 2021](https://research.nvidia.com/labs/lpr/publication/xie2
 
 ### 3.5 Topology- or graph-first approaches
 
-These are important to understand, but usually not the right first implementation for this assignment.
+These are important to understand, but usually not the right first implementation for this project.
 
 #### DeepRoadMapper
 
-DeepRoadMapper uses segmentation first, then graph extraction with topology repair. It is the clearest example of a two-stage “mask first, graph second” pipeline. This is conceptually close to what you would likely do in the take-home if you return GeoJSON or centerlines after mask inference.  
+DeepRoadMapper uses segmentation first, then graph extraction with topology repair. It is the clearest example of a two-stage “mask first, graph second” pipeline. This is conceptually close to what you would likely do in this project if you return GeoJSON or centerlines after mask inference.  
 Source: [Mattyus et al., 2017](https://openaccess.thecvf.com/content_ICCV_2017/papers/Mattyus_DeepRoadMapper_Extracting_Road_ICCV_2017_paper.pdf)
 
 #### RoadTracer
 
-RoadTracer is important because it argues that segmentation plus heuristics is often weak on connectivity. Instead it directly builds the graph through iterative search. This is very relevant if your real product goal is routing-quality road graphs rather than just segmentation masks. For the take-home, it is usually better to reference this paper in the write-up than to implement its full approach.  
+RoadTracer is important because it argues that segmentation plus heuristics is often weak on connectivity. Instead it directly builds the graph through iterative search. This is very relevant if your real product goal is routing-quality road graphs rather than just segmentation masks. For this project, it is usually better to reference this paper in the write-up than to implement its full approach.  
 Source: [Bastani et al., 2018](https://openaccess.thecvf.com/content_cvpr_2018/papers/Bastani_RoadTracer_Automatic_Extraction_CVPR_2018_paper.pdf)
 
 #### Single-shot graph extraction
 
-More recent work also tries to predict road graphs end-to-end without an explicit segmentation-then-vectorization pipeline. This is useful future-looking context but too ambitious for the assignment unless graph extraction is the main objective.  
+More recent work also tries to predict road graphs end-to-end without an explicit segmentation-then-vectorization pipeline. This is useful future-looking context but too ambitious for this project unless graph extraction is the main objective.  
 Source: [Bahl et al., 2022](https://openaccess.thecvf.com/content/CVPR2022W/EarthVision/papers/Bahl_Single-Shot_End-to-End_Road_Graph_Extraction_CVPRW_2022_paper.pdf)
 
-## 4. Which architectures are best for this take-home?
+## 4. Which architectures are best for this project?
 
 ### Best first implementation
 
@@ -166,7 +166,7 @@ Why:
 
 Risk:
 
-- more moving pieces for a time-boxed assignment
+- more moving pieces for a time-boxed project
 
 ## 5. Loss functions and optimization
 
@@ -185,7 +185,7 @@ This is not specific to roads, but it is a very standard and effective way to st
 
 #### Lovasz-Softmax / Lovasz hinge
 
-Lovasz losses are worth knowing because they directly target IoU-like optimization. They are particularly defensible when your offline metric is IoU. In practice, for a take-home, they are a good experiment after a simpler BCE+Dice or BCE+IoU baseline.  
+Lovasz losses are worth knowing because they directly target IoU-like optimization. They are particularly defensible when your offline metric is IoU. In practice, for a time-boxed project, they are a good experiment after a simpler BCE+Dice or BCE+IoU baseline.  
 Source: [Berman et al., 2018](https://arxiv.org/abs/1705.08790)
 
 #### Focal or Tversky-style losses
@@ -199,7 +199,7 @@ These exist to address class imbalance and the precision-recall tradeoff.
 
 ### Practical recommendation
 
-For the assignment:
+For this project:
 
 1. Start with `BCE + Dice` or `BCE + IoU`.
 2. Only switch to focal/Tversky/Lovasz if your validation masks show:
@@ -260,7 +260,7 @@ Sources:
 - [Buslaev et al., 2018](https://openaccess.thecvf.com/content_cvpr_2018_workshops/papers/w4/Buslaev_Fully_Convolutional_Network_CVPR_2018_paper.pdf)
 - [Zhou et al., 2018](https://openaccess.thecvf.com/content_cvpr_2018_workshops/papers/w4/Zhou_D-LinkNet_LinkNet_With_CVPR_2018_paper.pdf)
 
-For the take-home, AdamW is also a reasonable modern default, but that is an engineering inference rather than a claim from the challenge papers.
+For this project, AdamW is also a reasonable modern default, but that is an engineering inference rather than a claim from the challenge papers.
 
 ## 7. Data and preprocessing tricks
 
@@ -285,7 +285,7 @@ Source: [Zhou et al., 2018](https://openaccess.thecvf.com/content_cvpr_2018_work
 
 ### 7.4 Multi-source or auxiliary data
 
-Sun et al. show that crowdsourced GPS can improve road extraction robustness and generalization. This is not needed for the take-home, but it is an excellent paper to cite in the write-up when discussing future product improvements beyond RGB-only inference.  
+Sun et al. show that crowdsourced GPS can improve road extraction robustness and generalization. This is not needed for this project, but it is an excellent paper to cite in the write-up when discussing future product improvements beyond RGB-only inference.  
 Source: [Sun et al., 2019](https://openaccess.thecvf.com/content_CVPR_2019/html/Sun_Leveraging_Crowdsourced_GPS_Data_for_Road_Extraction_From_Aerial_Imagery_CVPR_2019_paper.html)
 
 ## 8. Inference and deployment implications
@@ -295,7 +295,7 @@ Source: [Sun et al., 2019](https://openaccess.thecvf.com/content_CVPR_2019/html/
 Buslaev et al. use TTA via rotations and average the predictions. This is a practical accuracy trick if latency is not strict.  
 Source: [Buslaev et al., 2018](https://openaccess.thecvf.com/content_cvpr_2018_workshops/papers/w4/Buslaev_Fully_Convolutional_Network_CVPR_2018_paper.pdf)
 
-For the assignment API:
+For the inference API:
 
 - keep TTA optional
 - disable it by default if latency matters
@@ -315,7 +315,7 @@ DeepRoadMapper and related work strongly suggest a practical decomposition:
 4. convert to graph or polyline form
 5. optionally repair connectivity
 
-This is the most defensible architecture for your take-home because it separates:
+This is the most defensible architecture for your project because it separates:
 
 - the ML problem
 - the geometry/topology problem
@@ -334,7 +334,7 @@ Sources:
 
 ### Offline metrics
 
-For this assignment, the most defensible set is:
+For this project, the most defensible set is:
 
 - IoU / Jaccard
 - Dice / F1
@@ -423,7 +423,7 @@ Sources:
 - [Mo et al., 2024 survey](https://www.mdpi.com/1424-8220/24/5/1708)
   - Why read it: recent deep-learning-focused road extraction survey.
 
-## 11. Recommended reading order for this assignment
+## 11. Recommended reading order for this project
 
 If time is limited, read in this order:
 

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "road-segmentation"
 version = "0.1.0"
-description = "Road segmentation project scaffold for the Hudhud take-home assignment."
+description = "Road segmentation from satellite imagery using deep learning."
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
