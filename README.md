@@ -315,6 +315,26 @@ The API provides production-grade observability:
 | 06 | Post-Processing | Per-step ablation study of threshold, morphology, TTA, gap bridging |
 | 07 | Model Optimization | ONNX export, FP16/INT8 compression, speed + accuracy benchmark |
 
+### Dataset Versioning
+
+The DeepGlobe dataset is fixed (single version on Kaggle), so formal dataset versioning (DVC, W&B dataset artifacts) is not implemented. However, reproducibility is ensured through:
+- Deterministic train/val split (seed=42, ratio=0.15) recorded in every checkpoint's config
+- The download script always fetches the same dataset version from Kaggle
+- In production, dataset changes would be tracked via content hashing and W&B artifacts, with retraining triggered when the hash changes
+
+### Docker Image and Model Weights
+
+The Docker image does not bake in model weights — they are mounted at runtime via volume:
+```bash
+docker run -p 8000:8000 -v ./models:/app/models ghcr.io/minaessam2015/road-segmentation:latest
+```
+
+This is the production pattern because:
+- Image stays small (~2 GB vs ~2.3 GB with model)
+- Same image works with different model versions (swap the mounted file)
+- Model updates don't require rebuilding or re-pushing the image
+- CI tests download from W&B inside the container for E2E verification
+
 ## License
 
 This project uses the [DeepGlobe Road Extraction Dataset](https://www.kaggle.com/datasets/balraj98/deepglobe-road-extraction-dataset) which must be downloaded separately via the Kaggle API. The dataset is not included in this repository.
