@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.use("Agg")  # non-interactive backend for saving figures
 import matplotlib.pyplot as plt  # noqa: E402
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.amp import GradScaler, autocast
@@ -333,6 +334,9 @@ class Trainer:
                 "val_precision": val_metrics["val_precision"],
                 "val_recall": val_metrics["val_recall"],
                 "lr": lr,
+                "grad_norm_mean": train_metrics.get("grad_norm_mean", 0.0),
+                "grad_norm_max": train_metrics.get("grad_norm_max", 0.0),
+                "throughput_img_per_sec": train_metrics.get("throughput_img_per_sec", 0.0),
                 "epoch_time_s": epoch_time,
             }
             self.history.append(record)
@@ -365,11 +369,22 @@ class Trainer:
         self._save_final_artifacts()
         return self._get_best_metrics()
 
+    def _compute_grad_norm(self) -> float:
+        """Compute total L2 norm of all gradients."""
+        total_norm = 0.0
+        for p in self.model.parameters():
+            if p.grad is not None:
+                total_norm += p.grad.data.norm(2).item() ** 2
+        return total_norm ** 0.5
+
     def _train_one_epoch(self, epoch: int) -> Dict[str, float]:
         self.model.train()
         running_loss = 0.0
         n_batches = 0
+        n_images = 0
+        grad_norms = []
         grad_accum = self.config.training.grad_accumulation_steps
+        epoch_start = time.time()
 
         self.optimizer.zero_grad()
 
@@ -393,6 +408,11 @@ class Trainer:
                 loss.backward()
 
             if (step + 1) % grad_accum == 0 or (step + 1) == len(self.train_loader):
+                # Compute gradient norm before optimizer step
+                if self.scaler is not None:
+                    self.scaler.unscale_(self.optimizer)
+                grad_norms.append(self._compute_grad_norm())
+
                 if self.scaler is not None:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
@@ -409,9 +429,18 @@ class Trainer:
 
             running_loss += loss.item() * grad_accum
             n_batches += 1
+            n_images += images.shape[0]
             pbar.set_postfix({"loss": f"{running_loss / n_batches:.4f}"})
 
-        return {"train_loss": running_loss / max(n_batches, 1)}
+        elapsed = time.time() - epoch_start
+        throughput = n_images / max(elapsed, 0.01)
+
+        return {
+            "train_loss": running_loss / max(n_batches, 1),
+            "grad_norm_mean": float(np.mean(grad_norms)) if grad_norms else 0.0,
+            "grad_norm_max": float(np.max(grad_norms)) if grad_norms else 0.0,
+            "throughput_img_per_sec": round(throughput, 1),
+        }
 
     @torch.no_grad()
     def _validate(self, epoch: int) -> Dict[str, float]:
@@ -460,6 +489,8 @@ class Trainer:
             f"val_iou={record['val_iou']:.4f} | "
             f"val_dice={record['val_dice']:.4f} | "
             f"lr={record['lr']:.2e} | "
+            f"grad_norm={record.get('grad_norm_mean', 0):.2f} | "
+            f"{record.get('throughput_img_per_sec', 0):.0f} img/s | "
             f"{record['epoch_time_s']:.1f}s"
         )
 
@@ -482,7 +513,81 @@ class Trainer:
         if self.wandb_run is not None:
             import wandb
             log_dict = {k: v for k, v in record.items() if isinstance(v, (int, float))}
+
+            # Log prediction images at visualization epochs
+            if self._should_visualize(epoch) and self._viz_batch is not None:
+                log_dict.update(self._wandb_prediction_images(epoch))
+
+            # Log confidence histogram
+            log_dict.update(self._wandb_confidence_histogram(epoch))
+
             wandb.log(log_dict, step=epoch)
+
+    def _wandb_prediction_images(self, epoch: int) -> Dict:
+        """Generate W&B image logs for prediction samples."""
+        try:
+            import wandb
+            from road_segmentation.training.visualization import denormalize_image
+
+            eval_model = self.ema.module if self.ema is not None else self.model
+            eval_model.eval()
+
+            images = self._viz_batch["image"].to(self.device)
+            masks_gt = self._viz_batch["mask"]
+
+            with torch.no_grad():
+                with autocast(device_type=self.amp_device_type, enabled=self.use_amp):
+                    logits = eval_model(images)
+                probs = torch.sigmoid(logits).cpu()
+
+            wb_images = []
+            for i in range(min(4, len(images))):
+                img = denormalize_image(
+                    self._viz_batch["image"][i],
+                    self.config.normalization.mean,
+                    self.config.normalization.std,
+                )
+                gt = masks_gt[i, 0].numpy()
+                pred = (probs[i, 0].numpy() >= 0.5).astype(np.uint8)
+
+                wb_images.append(wandb.Image(
+                    img,
+                    masks={
+                        "ground_truth": {"mask_data": (gt > 0).astype(np.uint8), "class_labels": {1: "road"}},
+                        "prediction": {"mask_data": pred, "class_labels": {1: "road"}},
+                    },
+                    caption=f"Sample {i}",
+                ))
+
+            return {"predictions": wb_images}
+        except Exception as e:
+            logger.debug(f"W&B image logging failed: {e}")
+            return {}
+
+    def _wandb_confidence_histogram(self, epoch: int) -> Dict:
+        """Log prediction confidence distribution to W&B."""
+        try:
+            import wandb
+
+            eval_model = self.ema.module if self.ema is not None else self.model
+            eval_model.eval()
+
+            # Use a single val batch for the histogram
+            batch = next(iter(self.val_loader))
+            images = batch["image"].to(self.device)
+            with torch.no_grad():
+                with autocast(device_type=self.amp_device_type, enabled=self.use_amp):
+                    logits = eval_model(images)
+                probs = torch.sigmoid(logits).cpu().numpy().ravel()
+
+            # Subsample for efficiency
+            if len(probs) > 50000:
+                probs = np.random.choice(probs, 50000, replace=False)
+
+            return {"confidence_histogram": wandb.Histogram(probs, num_bins=50)}
+        except Exception as e:
+            logger.debug(f"W&B histogram logging failed: {e}")
+            return {}
 
     # ------------------------------------------------------------------
     # Checkpointing
