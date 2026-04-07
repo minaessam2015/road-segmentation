@@ -25,3 +25,4 @@ test_results_test/
 .env
 kaggle.json
 .DS_Store
+*.pdf
