@@ -188,68 +188,59 @@ class InferenceEngine:
         return tensor.to(self.device)
 
 
-def mask_to_geojson(mask: np.ndarray, simplify_tolerance: float = 2.0) -> dict:
-    """Convert a binary mask to GeoJSON-style polylines.
+def mask_to_geojson(
+    mask: np.ndarray,
+    simplify_tolerance: float = 2.0,
+    min_branch_length: int = 20,
+    min_component_area: int = 100,
+) -> dict:
+    """Convert a binary road mask to GeoJSON polylines via centerline extraction.
 
-    Extracts road centerlines via skeletonization, then converts
-    contiguous skeleton segments to LineString features.
+    Pipeline:
+        1. Remove small noise components
+        2. Morphological closing to fill small gaps
+        3. Skeletonize to 1-pixel-wide road centerlines
+        4. Extract graph (nodes + edges) from skeleton
+        5. Prune short dangling branches
+        6. Simplify edge geometry (Douglas-Peucker)
+        7. Export as GeoJSON LineString features
 
     Args:
         mask: Binary mask (H, W) with road pixels = 255.
-        simplify_tolerance: Douglas-Peucker simplification tolerance in pixels.
+        simplify_tolerance: Douglas-Peucker tolerance in pixels.
+        min_branch_length: Minimum edge length to keep (pixels).
+        min_component_area: Minimum connected component area (pixels).
 
     Returns:
-        GeoJSON FeatureCollection dict with LineString features
-        in pixel coordinates.
+        GeoJSON FeatureCollection with LineString features in pixel coordinates.
     """
-    from skimage.morphology import skeletonize
+    from road_segmentation.postprocessing.steps import (
+        graph_to_geojson,
+        morphological_close,
+        prune_short_branches,
+        remove_small_components,
+        simplify_edges,
+        skeleton_to_graph,
+        skeletonize_mask,
+    )
 
-    # Morphological closing to fill small gaps
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    # Step 1: Clean the mask
+    cleaned = remove_small_components(mask, min_area=min_component_area)
 
-    # Skeletonize to 1-pixel centerlines
-    binary = (closed > 0).astype(np.uint8)
-    skeleton = skeletonize(binary).astype(np.uint8) * 255
+    # Step 2: Fill small gaps
+    closed = morphological_close(cleaned, kernel_size=5)
 
-    # Find contours of the skeleton
-    contours, _ = cv2.findContours(skeleton, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    # Step 3: Skeletonize to centerlines
+    skeleton = skeletonize_mask(closed)
 
-    features = []
-    for contour in contours:
-        if len(contour) < 2:
-            continue
+    # Step 4: Extract graph
+    graph = skeleton_to_graph(skeleton)
 
-        # Simplify the polyline
-        epsilon = simplify_tolerance
-        approx = cv2.approxPolyDP(contour, epsilon, closed=False)
+    # Step 5: Prune short branches
+    graph = prune_short_branches(graph, min_length_px=min_branch_length)
 
-        if len(approx) < 2:
-            continue
+    # Step 6: Simplify geometry
+    graph = simplify_edges(graph, tolerance=simplify_tolerance)
 
-        # Convert to coordinate list [[x, y], ...]
-        coords = approx.squeeze().tolist()
-        if isinstance(coords[0], (int, float)):
-            coords = [coords]  # single point edge case
-        if len(coords) < 2:
-            continue
-
-        features.append({
-            "type": "Feature",
-            "geometry": {
-                "type": "LineString",
-                "coordinates": coords,
-            },
-            "properties": {
-                "length_px": float(cv2.arcLength(contour, closed=False)),
-            },
-        })
-
-    return {
-        "type": "FeatureCollection",
-        "features": features,
-        "properties": {
-            "num_segments": len(features),
-            "coordinate_system": "pixel",
-        },
-    }
+    # Step 7: Export as GeoJSON
+    return graph_to_geojson(graph)
