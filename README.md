@@ -1,149 +1,165 @@
 # Road Segmentation from Satellite Imagery
 
-End-to-end road extraction system: train a segmentation model on satellite images and serve predictions via an inference API. Built for the Hudhud ML Engineer take-home assignment.
+[![CI](https://github.com/minaessam2015/road-segmentation/actions/workflows/ci.yml/badge.svg)](https://github.com/minaessam2015/road-segmentation/actions)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Live experiment tracking**: [wandb.ai/minaessam/road-segmentation](https://wandb.ai/minaessam/road-segmentation)
+End-to-end road extraction system that trains a segmentation model on satellite images and serves predictions via an inference API with ONNX optimization.
 
-## Results
+| | |
+|---|---|
+| **Live Experiments** | [wandb.ai/minaessam/road-segmentation](https://wandb.ai/minaessam/road-segmentation) |
+| **Docker Image** | `ghcr.io/minaessam2015/road-segmentation:latest` |
+| **Best Val IoU** | 0.7016 (Dice: 0.8246) |
+| **Inference Latency** | 78 ms (ONNX FP16, T4 GPU) |
 
-| Metric | Value |
-|--------|-------|
-| **Best Val IoU** | 0.7016 |
-| **Best Val Dice** | 0.8246 |
-| Architecture | UNet++ + EfficientNet-B4 |
-| Input resolution | 1024x1024 |
-| Training data | 5,292 samples (85% of DeepGlobe train) |
-| Inference latency (ONNX FP16, T4 GPU) | 78 ms |
+---
 
-### Model Comparison (preliminary, 1000 samples, 15 epochs)
+## Table of Contents
 
-| Model | IoU | Dice | Params | Time |
-|-------|-----|------|--------|------|
-| **U-Net + ResNet34** | 0.528 | 0.691 | 24.4M | 10 min |
-| LinkNet + ResNet34 | 0.507 | 0.673 | 21.8M | 9 min |
-| SegFormer + MIT-B2 | 0.485 | 0.653 | 24.7M | 15 min |
-| DeepLabV3+ + ResNet50 | 0.484 | — | 26.7M | 10 min |
+- [Quick Start with Docker](#quick-start-with-docker)
+- [Manual Setup](#manual-setup)
+- [Training](#training)
+- [Inference API](#inference-api)
+- [Testing](#testing)
+- [Notebooks](#notebooks)
+- [Project Structure](#project-structure)
+- [Results](#results)
+- [Design Decisions](#design-decisions)
+- [Production Considerations](#production-considerations)
 
-### Optimization Benchmark (T4 GPU)
+---
 
-| Variant | Latency | Speedup | IoU | Size |
-|---------|---------|---------|-----|------|
-| PyTorch FP32 | 145.6 ms | 1.00x | 0.6835 | — |
-| PyTorch FP16/AMP | 95.5 ms | 1.52x | 0.6835 | — |
-| ONNX FP32 | 135.7 ms | 1.07x | 0.6835 | 80 MB |
-| **ONNX FP16** | **78.3 ms** | **1.86x** | **0.6835** | **40 MB** |
+## Quick Start with Docker
 
-Zero IoU loss across all compression variants.
-
-## Quick Start
-
-### 1. Setup
+### Option A: Auto-download model (single command)
 
 ```bash
 git clone https://github.com/minaessam2015/road-segmentation.git
 cd road-segmentation
+
+# Set your W&B API key (get it from https://wandb.ai/authorize)
+echo "WANDB_API_KEY=your_key_here" > .env
+
+# Build and run — model downloads automatically on first start
+docker-compose up --build
+```
+
+The API will be available at `http://localhost:8000`.
+
+### Option B: Pre-downloaded model
+
+```bash
+# Download model first
+pip install wandb
+python scripts/download_model.py --onnx-only
+
+# Run with mounted model
+docker-compose up --build
+```
+
+### Option C: Pull pre-built image
+
+```bash
+docker pull ghcr.io/minaessam2015/road-segmentation:latest
+
+# Run with local model directory
+docker run -p 8000:8000 \
+  -v ./models:/app/models \
+  -e WANDB_API_KEY=your_key \
+  ghcr.io/minaessam2015/road-segmentation:latest
+```
+
+### Test the running API
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Segment a satellite image
+curl -X POST http://localhost:8000/api/v1/segment \
+  -F "image=@satellite.jpg" | python -m json.tool
+
+# With GeoJSON road polylines
+curl -X POST "http://localhost:8000/api/v1/segment?return_geojson=true" \
+  -F "image=@satellite.jpg" | python -m json.tool
+
+# Prometheus metrics
+curl http://localhost:8000/metrics
+```
+
+---
+
+## Manual Setup
+
+### Prerequisites
+
+- Python 3.9+
+- [Kaggle API token](https://www.kaggle.com/settings) (for dataset download)
+- [W&B API key](https://wandb.ai/authorize) (for model download and experiment tracking)
+
+### Installation
+
+```bash
+git clone https://github.com/minaessam2015/road-segmentation.git
+cd road-segmentation
+
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-### 2. Download Data
-
-Get a Kaggle API token from [kaggle.com/settings](https://www.kaggle.com/settings), then:
+### Configuration
 
 ```bash
 cp .env.example .env
-# Edit .env with your KAGGLE_USERNAME and KAGGLE_KEY
+# Edit .env with your credentials:
+#   KAGGLE_USERNAME=your_username
+#   KAGGLE_KEY=your_kaggle_key
+#   WANDB_API_KEY=your_wandb_key
+```
+
+### Download Dataset
+
+```bash
 python scripts/download_data.py
 ```
 
-### 3. Download Model Weights
+Downloads the [DeepGlobe Road Extraction Dataset](https://www.kaggle.com/datasets/balraj98/deepglobe-road-extraction-dataset) (6,226 satellite images with road masks, 1024x1024 pixels).
 
-Models are stored in the [W&B Model Registry](https://wandb.ai/minaessam/road-segmentation):
+### Download Model Weights
 
 ```bash
-# Add your WANDB_API_KEY to .env, then:
-python scripts/download_model.py              # all models (checkpoint + ONNX)
-python scripts/download_model.py --onnx-only  # just ONNX for deployment
+# All models (PyTorch checkpoint + ONNX variants):
+python scripts/download_model.py
+
+# ONNX only (for deployment):
+python scripts/download_model.py --onnx-only
 ```
 
-### 4. Run the API
+### Run the API
 
 ```bash
-# CPU (INT8 quantized — 21 MB):
+# CPU serving (INT8 quantized, 21 MB):
 python scripts/serve.py --onnx models/UnetPlusPlus_efficientnet-b4_int8.onnx --device cpu
 
-# GPU (FP16 — 40 MB):
+# GPU serving (FP16, 40 MB):
 python scripts/serve.py --onnx models/UnetPlusPlus_efficientnet-b4_fp16.onnx --device gpu
+
+# From PyTorch checkpoint:
+python scripts/serve.py --checkpoint checkpoints/best.pth
 ```
 
-Test it:
+### Test the API with validation images
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/segment \
-  -F "image=@satellite.jpg" | python -m json.tool
+# Start the server in one terminal, then:
+python scripts/test_api_client.py --val-set --n 10 --geojson
 ```
 
-### 5. Docker
+This sends validation images (with ground truth) to the API and saves: prediction overlays, error maps (TP/FP/FN), side-by-side comparisons, and per-sample IoU scores.
 
-```bash
-docker-compose up --build
-# Or pull the pre-built image:
-docker pull ghcr.io/minaessam2015/road-segmentation:latest
-```
-
-## Project Structure
-
-```
-road-segmentation/
-    src/road_segmentation/
-        api/                    # FastAPI inference service
-            app.py              # Endpoints: /segment, /health, /metrics
-            inference.py        # PyTorch inference engine
-            optimize.py         # ONNX export, INT8/FP16 optimization
-            observability.py    # Structured logging, request tracing, Prometheus
-        data/                   # Dataset loading and preprocessing
-            dataset.py          # PyTorch Dataset + DataLoader
-            transforms.py       # Albumentations augmentation pipelines
-            split.py            # Stratified train/val split
-            eda.py              # Exploratory data analysis utilities
-        models/
-            factory.py          # SMP model creation, encoder freeze/unfreeze
-        training/
-            trainer.py          # Training loop (AMP, checkpointing, W&B)
-            losses.py           # BCE+Dice, Focal, Tversky, boundary-weighted
-            metrics.py          # IoU, Dice, Precision, Recall
-            callbacks.py        # Early stopping, Model EMA
-            checkpoint.py       # Save/load with resume support
-            visualization.py    # Training curves, prediction overlays
-        postprocessing/
-            steps.py            # Threshold, morphology, skeletonize, gap bridging
-            pipeline.py         # Composable pipeline with toggleable steps
-        config.py               # YAML config system with CLI overrides
-        env.py                  # .env loading for credentials
-        paths.py                # Project path constants
-    configs/                    # YAML configs for each architecture
-    scripts/
-        train.py                # CLI: python scripts/train.py --config configs/...
-        serve.py                # CLI: python scripts/serve.py --onnx models/...
-        optimize.py             # CLI: export and compress models to ONNX
-        download_model.py       # Download from W&B model registry
-        upload_model.py         # Upload to W&B model registry
-        upload_to_wandb.py      # Post-hoc upload of training metrics to W&B
-        test_api_client.py      # API test client with GT comparison
-    notebooks/
-        01_eda.ipynb            # Data exploration and EDA-driven decisions
-        02_model_comparison.ipynb  # Quick 4-model architecture comparison
-        03_training.ipynb       # Full training (Colab, W&B, Drive checkpoints)
-        04_data_leakage_check.ipynb  # Train/val similarity analysis
-        05_error_analysis.ipynb # Failure patterns, calibration, spatial errors
-        06_postprocessing_ablation.ipynb  # Per-step IoU contribution
-        07_model_optimization.ipynb  # ONNX export + speed/accuracy benchmark
-    tests/                      # 69 tests (unit + end-to-end)
-    .github/workflows/ci.yml   # Lint, test, Docker build, GHCR push
-    Dockerfile                  # Multi-stage build for inference
-    docker-compose.yml          # Single-command deployment
-```
+---
 
 ## Training
 
@@ -154,18 +170,15 @@ python scripts/train.py --config configs/unet_resnet34.yaml \
     --override training.epochs=5 data.subset_size=200 data.num_workers=0
 ```
 
-### Full Training (Colab)
+### Full Training (Colab with GPU)
 
-Open `notebooks/03_training.ipynb` on [Google Colab](https://colab.research.google.com):
-1. Set runtime to GPU (T4 or A100)
-2. Set your credentials (Kaggle + W&B)
-3. Run all cells
+Open the training notebook on Colab, set your credentials, and run all cells. Checkpoints save to Google Drive automatically. On disconnect, re-run to resume from the latest checkpoint.
 
-Checkpoints save to Google Drive automatically. On disconnect, re-run all cells to resume from the latest checkpoint.
+See [Notebooks](#notebooks) section below for the Colab link.
 
 ### Config System
 
-Each architecture has a YAML config in `configs/`. Override any parameter from the CLI:
+Each architecture has a YAML config. Override any parameter from the CLI:
 
 ```bash
 python scripts/train.py --config configs/unet_resnet34.yaml \
@@ -173,27 +186,45 @@ python scripts/train.py --config configs/unet_resnet34.yaml \
 ```
 
 Available configs:
-- `unet_resnet34.yaml` — baseline (closest to D-LinkNet winner)
-- `unet_efficientnet_b4.yaml` — stronger encoder
-- `unetplusplus_efficientnet_b4_1024.yaml` — best model (full resolution)
-- `deeplabv3plus_resnet50.yaml` — multi-scale context
-- `linknet_resnet34.yaml` — fastest inference
-- `segformer_mitb2.yaml` — transformer architecture
-- `finetune_boundary_loss.yaml` — boundary-weighted loss fine-tuning
 
-## API Reference
+| Config | Architecture | Notes |
+|--------|-------------|-------|
+| `unet_resnet34.yaml` | U-Net + ResNet34 | Baseline |
+| `unet_efficientnet_b4.yaml` | U-Net + EfficientNet-B4 | Stronger encoder |
+| `unetplusplus_efficientnet_b4_1024.yaml` | UNet++ + EfficientNet-B4 @ 1024 | **Best model** |
+| `deeplabv3plus_resnet50.yaml` | DeepLabV3+ + ResNet50 | Multi-scale context |
+| `linknet_resnet34.yaml` | LinkNet + ResNet34 | Fastest inference |
+| `segformer_mitb2.yaml` | SegFormer + MIT-B2 | Transformer architecture |
+| `finetune_boundary_loss.yaml` | Boundary-weighted loss | Fine-tuning from checkpoint |
+
+### Model Export and Optimization
+
+```bash
+# Export trained model to ONNX (FP32 + FP16 + INT8):
+python scripts/optimize.py --checkpoint checkpoints/best.pth --output models/ --targets cpu gpu
+```
+
+---
+
+## Inference API
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/segment` | Upload satellite image, get road mask |
+| `GET` | `/health` | Health check (model status, disk, GPU memory) |
+| `GET` | `/api/v1/model-info` | Model version and configuration |
+| `GET` | `/metrics` | Prometheus-compatible metrics |
 
 ### `POST /api/v1/segment`
 
-Upload a satellite image, get a road mask.
+**Parameters:**
+- `image` (file, required): Satellite image (PNG, JPG, TIFF)
+- `threshold` (float, optional): Binarization threshold, default 0.5
+- `return_geojson` (bool, optional): Include road polylines as GeoJSON
 
-```bash
-curl -X POST http://localhost:8000/api/v1/segment \
-  -F "image=@satellite.jpg" \
-  -G -d "threshold=0.5" -d "return_geojson=true"
-```
-
-Response:
+**Response:**
 ```json
 {
   "mask_url": "/results/abc123_mask.png",
@@ -206,134 +237,214 @@ Response:
     "threshold": 0.5,
     "request_id": "abc123"
   },
-  "geojson": { "type": "FeatureCollection", "features": [...] }
+  "geojson": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": { "type": "LineString", "coordinates": [[x1,y1], [x2,y2], ...] },
+        "properties": { "length_px": 245.3 }
+      }
+    ]
+  }
 }
 ```
 
-### `GET /health`
+### Observability
 
-Returns model status, disk space, GPU memory.
+- **Structured JSON logging**: Every request logged with timestamp, request ID, duration, status
+- **Request tracing**: `X-Request-ID` header propagated through all stages
+- **Inference audit trail**: Image hash, prediction stats, model version per request
+- **Prometheus metrics**: Request counts, latency p50/p95/p99, error rates at `/metrics`
+- **Health check**: Model status, disk space, GPU memory at `/health`
 
-### `GET /api/v1/model-info`
-
-Returns model backend, version, and device.
-
-### `GET /metrics`
-
-Prometheus-compatible metrics: request counts, latency percentiles, error rates.
+---
 
 ## Testing
 
 ```bash
-# Unit tests (no model weights needed):
+# Unit tests only (no model weights needed, runs in CI):
 pytest tests/ --ignore=tests/test_e2e.py
 
-# Full suite including end-to-end (needs model weights):
+# Full suite including end-to-end (needs model weights in checkpoints/ and models/):
 pytest tests/
 
-# With specific model paths:
+# E2E with specific model paths:
 pytest tests/test_e2e.py --checkpoint checkpoints/best.pth --onnx models/model_int8.onnx
 ```
 
-69 tests covering: config loading, data transforms, model forward pass, all 7 loss functions, boundary weight computation, post-processing pipeline, API endpoints, and end-to-end inference with real model weights.
+**69 tests** covering:
+- Config loading, validation, CLI overrides
+- Data transforms, normalization, resize
+- Model forward pass, encoder freeze/unfreeze, parameter counting
+- All 7 loss functions, boundary weight computation
+- Post-processing pipeline (threshold, morphology, skeletonization)
+- API endpoints with mocked model
+- End-to-end: real model checkpoint → ONNX → API → verify response
 
-## Design Decisions and Trade-offs
+---
 
-### Architecture Choice
+## Notebooks
 
-**UNet++ with EfficientNet-B4 encoder** was selected based on a systematic comparison of 4 architectures on the DeepGlobe dataset. U-Net's skip connections preserve fine spatial detail critical for thin roads. EfficientNet-B4's compound scaling (depth + width + resolution) provides richer features than ResNet at similar parameter count. UNet++ adds dense nested skip connections that improve thin road segmentation over vanilla U-Net.
+All notebooks are designed to run on Google Colab with GPU. Click the Colab badge to open directly.
 
-We chose not to use the original D-LinkNet despite it winning the DeepGlobe challenge because: (1) the code requires Python 2.7 / PyTorch 0.2, (2) pretrained weights are hosted on untrusted personal file-sharing links, and (3) SMP's LinkNet + ResNet34 approximates the approach with production-quality code.
+| # | Notebook | Open in Colab | Description |
+|---|----------|---------------|-------------|
+| 01 | [EDA](notebooks/01_eda.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/minaessam2015/road-segmentation/blob/main/notebooks/01_eda.ipynb) | Data exploration: class imbalance, road width, spatial patterns, mask quality. All downstream decisions (loss, metrics, augmentations) are justified here. |
+| 02 | [Model Comparison](notebooks/02_model_comparison.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/minaessam2015/road-segmentation/blob/main/notebooks/02_model_comparison.ipynb) | Quick benchmark of 4 architectures (U-Net, LinkNet, SegFormer, DeepLabV3+) on 1000 samples. Produces ranked comparison table and overlaid training curves. |
+| 03 | [Training](notebooks/03_training.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/minaessam2015/road-segmentation/blob/main/notebooks/03_training.ipynb) | Full training with W&B tracking and Google Drive checkpoints. Auto-resumes on Colab disconnect. |
+| 04 | [Data Leakage](notebooks/04_data_leakage_check.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/minaessam2015/road-segmentation/blob/main/notebooks/04_data_leakage_check.ipynb) | Train/val similarity analysis using ResNet50 + CLIP embeddings. Quantifies metric inflation from spatial leakage. |
+| 05 | [Error Analysis](notebooks/05_error_analysis.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/minaessam2015/road-segmentation/blob/main/notebooks/05_error_analysis.ipynb) | Failure patterns, FP/FN balance, performance by road width/coverage, spatial error heatmaps, calibration (reliability diagram, ECE, temperature scaling). |
+| 06 | [Post-Processing](notebooks/06_postprocessing_ablation.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/minaessam2015/road-segmentation/blob/main/notebooks/06_postprocessing_ablation.ipynb) | Ablation study: per-step IoU contribution of threshold tuning, component filtering, morphology, gap bridging, TTA. |
+| 07 | [Model Optimization](notebooks/07_model_optimization.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/minaessam2015/road-segmentation/blob/main/notebooks/07_model_optimization.ipynb) | ONNX export, FP16/INT8 compression, speed + accuracy benchmark on GPU. |
+
+---
+
+## Project Structure
+
+```
+road-segmentation/
+    src/road_segmentation/
+        api/                        # Inference service
+            app.py                  #   FastAPI endpoints
+            inference.py            #   PyTorch inference engine + GeoJSON
+            optimize.py             #   ONNX export, INT8/FP16
+            observability.py        #   Logging, tracing, Prometheus
+        data/                       # Dataset handling
+            dataset.py              #   PyTorch Dataset + DataLoader
+            transforms.py           #   Albumentations pipelines
+            split.py                #   Stratified train/val split
+            eda.py                  #   EDA utilities
+            download.py             #   Kaggle dataset download
+        models/
+            factory.py              #   SMP model creation + encoder management
+        training/
+            trainer.py              #   Training loop (AMP, W&B, checkpointing)
+            losses.py               #   7 loss functions incl. boundary-weighted
+            metrics.py              #   IoU, Dice, Precision, Recall
+            callbacks.py            #   Early stopping, Model EMA
+            checkpoint.py           #   Save/load with resume
+            visualization.py        #   Curves, prediction overlays
+        postprocessing/
+            steps.py                #   Individual steps (threshold, morph, skeleton)
+            pipeline.py             #   Composable toggleable pipeline
+        config.py                   #   YAML config + CLI overrides
+        env.py                      #   .env credential loading
+        paths.py                    #   Path constants
+    configs/                        #   9 YAML architecture configs
+    scripts/
+        train.py                    #   Training CLI
+        serve.py                    #   API server CLI
+        optimize.py                 #   Model export CLI
+        download_model.py           #   Download from W&B registry
+        upload_model.py             #   Upload to W&B registry
+        test_api_client.py          #   API test with GT comparison
+        entrypoint.sh               #   Docker auto-download entrypoint
+    notebooks/                      #   7 analysis notebooks (see above)
+    tests/                          #   69 tests (unit + e2e)
+    .github/workflows/ci.yml       #   CI: lint, test, Docker, GHCR push
+    Dockerfile                      #   Multi-stage inference image
+    docker-compose.yml              #   Single-command deployment
+```
+
+---
+
+## Results
+
+### Final Model
+
+| Metric | Value |
+|--------|-------|
+| Architecture | UNet++ + EfficientNet-B4 |
+| Input | 1024x1024 (full resolution) |
+| **Val IoU** | **0.7016** |
+| **Val Dice** | **0.8246** |
+| Training | 50 epochs, 5292 train / 934 val |
+| Cleaned IoU (leakage-adjusted) | 0.675 |
+
+### Architecture Comparison (1000 samples, 15 epochs)
+
+| Rank | Model | IoU | Dice | Params | Time |
+|------|-------|-----|------|--------|------|
+| 1 | **U-Net + ResNet34** | **0.528** | 0.691 | 24.4M | 10 min |
+| 2 | LinkNet + ResNet34 | 0.507 | 0.673 | 21.8M | 9 min |
+| 3 | SegFormer + MIT-B2 | 0.485 | 0.653 | 24.7M | 15 min |
+| 4 | DeepLabV3+ + ResNet50 | 0.484 | — | 26.7M | 10 min |
+
+### Optimization (T4 GPU)
+
+| Variant | Latency | Speedup | IoU | Size |
+|---------|---------|---------|-----|------|
+| PyTorch FP32 | 145.6 ms | 1.00x | 0.6835 | — |
+| PyTorch FP16/AMP | 95.5 ms | 1.52x | 0.6835 | — |
+| ONNX FP32 | 135.7 ms | 1.07x | 0.6835 | 80 MB |
+| **ONNX FP16** | **78.3 ms** | **1.86x** | **0.6835** | **40 MB** |
+| ONNX INT8 (CPU) | — | — | — | 21 MB |
+
+Zero IoU loss across all compression variants.
+
+### Post-Processing Ablation
+
+| Step | IoU | Delta | Verdict |
+|------|-----|-------|---------|
+| Raw threshold (0.5) | 0.7016 | baseline | — |
+| Optimal threshold | 0.7017 | +0.01% | Neutral |
+| + Component filter | 0.7019 | +0.02% | Neutral |
+| + Morph. closing | 0.7012 | -0.04% | Neutral |
+| TTA (6-fold) | 0.7014 | +0.65%* | Include |
+
+Model produces clean predictions — minimal post-processing needed.
+
+### Data Leakage
+
+| Metric | Original | Cleaned | Inflation |
+|--------|----------|---------|-----------|
+| Mean IoU | 0.694 | 0.675 | 1.9% |
+
+123 potentially leaky val samples identified using ResNet50 + CLIP embeddings. Metrics slightly optimistic — both values reported for transparency.
+
+---
+
+## Design Decisions
+
+### Architecture
+
+**UNet++ + EfficientNet-B4** selected via systematic 4-model comparison. UNet++ dense skip connections preserve thin road features. EfficientNet-B4 provides NAS-optimized compound scaling. Full 1024x1024 resolution preserves road detail without downsampling.
+
+We chose not to use D-LinkNet (DeepGlobe winner) because its code requires Python 2.7 / PyTorch 0.2 and weights are on untrusted file-sharing links. SMP's architectures provide production-quality alternatives.
 
 ### Loss Function
 
-**BCE + Dice compound loss** handles the severe class imbalance (roads are ~4% of pixels). BCE provides stable per-pixel gradients while Dice directly optimizes the overlap metric. We also implemented boundary-weighted loss (5x weight on edge pixels) for fine-tuning, though the ablation showed minimal additional gain on our well-trained model.
+**BCE + Dice compound loss** handles severe class imbalance (roads ~4% of pixels). BCE provides stable gradients; Dice optimizes the overlap metric directly. Boundary-weighted loss (5x on edge pixels) was tested but showed minimal gain — the model was already well-calibrated.
 
-### Evaluation Metrics
+### Evaluation
 
-**IoU (Jaccard index)** as the primary metric because it penalizes both false positives and false negatives equally. Pixel accuracy is useless for road segmentation — a model predicting all-background achieves 96% accuracy. We also report Dice, Precision, and Recall. For production monitoring, we track calibration (reliability diagrams, ECE) to ensure confidence scores are trustworthy.
+**IoU** as primary metric (not pixel accuracy, which is meaningless at 96% background). Also report Dice, Precision, Recall. Production monitoring includes calibration tracking (ECE, reliability diagrams).
 
 ### Data Integrity
 
-We identified potential spatial data leakage in the random train/val split using both ResNet50 and CLIP embedding similarity analysis. Combining both methods (ResNet >= 0.93 OR CLIP >= 0.96) flagged 123 potentially leaky validation samples. After removing them, the IoU dropped from 0.694 to 0.675 — a 1.9% inflation. We report both metrics for transparency.
+Spatial leakage analysis (ResNet50 + CLIP embeddings) found 1.9% IoU inflation from adjacent tiles in train/val split. Both original and cleaned metrics reported.
 
-### Post-Processing
-
-The ablation study showed minimal post-processing gains on our model: threshold optimization (+0.01% IoU), component filtering (+0.02%), morphological operations (-0.04%). This indicates the model produces clean predictions that don't need heavy post-processing. TTA provides +0.65% IoU on harder samples. For production, we use the raw model output with a tuned threshold.
+---
 
 ## Production Considerations
 
 ### Scalability
-
-The inference service is stateless — each request loads the image, runs inference, and returns results independently. To handle thousands of tiles per hour:
-- **Horizontal scaling**: Deploy multiple replicas behind a load balancer (Kubernetes, ECS). Each replica loads the ONNX model independently.
-- **Task queue**: For batch processing, use Celery/Redis or AWS SQS to decouple submission from processing.
-- **Tiling**: Large satellite images are tiled with overlap (128-256px), processed in parallel, and stitched with central-crop blending to avoid boundary artifacts.
+Stateless service enables horizontal scaling behind a load balancer. Batch processing via task queues (Celery/Redis). Large images tiled with overlap and stitched with central-crop blending.
 
 ### Latency
-
-ONNX FP16 achieves 78ms per 1024x1024 image on a T4 GPU (1.86x speedup over PyTorch FP32, zero IoU loss). Further optimizations:
-- **TensorRT**: Potential additional 2-3x speedup with layer fusion and kernel auto-tuning.
-- **Batching**: Process multiple tiles simultaneously to saturate GPU throughput.
-- **INT8 quantization**: 21 MB model for CPU deployment where GPU is unavailable.
-- **Model distillation**: Train a smaller student model from the current teacher for edge deployment.
+ONNX FP16 at 78ms/image on T4 GPU (1.86x speedup, zero accuracy loss). Further: TensorRT for 2-3x more, batching, INT8 for CPU (21 MB model).
 
 ### Model Lifecycle
-
-- **Versioning**: Models are stored in the W&B Model Registry with version tags, training config, and metrics.
-- **Download**: `python scripts/download_model.py --version v1` fetches a specific version.
-- **A/B testing**: Route a percentage of traffic to a new model version, compare IoU on held-out samples.
-- **Rollback**: Previous versions remain in the registry. Swap by changing the version tag in the deployment config.
-- **CI/CD**: GitHub Actions builds and pushes Docker images to GHCR on every merge to main. The image is available at `ghcr.io/minaessam2015/road-segmentation:latest`.
+W&B Model Registry for versioning. `python scripts/download_model.py --version v1` for any version. A/B testing via traffic routing. One-command rollback. CI/CD pushes Docker images to GHCR on every merge.
 
 ### Data Drift
-
-Satellite imagery varies by provider, resolution, season, and geography. Detection strategy:
-- **Input monitoring**: Track per-batch RGB channel means and standard deviations. Alert when KL divergence from training distribution exceeds a threshold.
-- **Prediction monitoring**: Track road_coverage_pct and confidence_mean distributions over time. A sudden shift indicates either data drift or model degradation.
-- **Calibration monitoring**: Periodically recompute the reliability diagram on new labeled samples. ECE increasing over time signals miscalibration.
-- **Retraining trigger**: When drift is detected, retrain on a mix of original and new data. The config system and W&B tracking make this reproducible.
-
-### Observability
-
-The API provides production-grade observability:
-- **Structured JSON logging**: Every request logged with timestamp, request ID, duration, status.
-- **Request tracing**: Unique `X-Request-ID` header propagated through all stages.
-- **Inference audit trail**: Image hash, prediction stats, model version logged per request.
-- **Prometheus metrics**: `GET /metrics` endpoint with request counts, latency p50/p95/p99, error rates.
-- **Health check**: `GET /health` returns model status, disk space, GPU memory.
-
-## Notebooks
-
-| # | Notebook | Purpose |
-|---|----------|---------|
-| 01 | EDA | Data exploration, class imbalance analysis, EDA-driven decisions |
-| 02 | Model Comparison | Quick 4-architecture comparison (1000 samples, 15 epochs) |
-| 03 | Training | Full training with W&B tracking and Drive checkpoints |
-| 04 | Data Leakage | Train/val similarity analysis (ResNet + CLIP embeddings) |
-| 05 | Error Analysis | Failure patterns, calibration, spatial errors, temperature scaling |
-| 06 | Post-Processing | Per-step ablation study of threshold, morphology, TTA, gap bridging |
-| 07 | Model Optimization | ONNX export, FP16/INT8 compression, speed + accuracy benchmark |
+Monitor input RGB statistics (KL divergence), prediction distributions (coverage, confidence), and calibration (ECE) over time. Alert and retrigger training when drift detected.
 
 ### Dataset Versioning
+DeepGlobe is fixed, so formal versioning (DVC) not implemented. Reproducibility ensured via deterministic split (seed=42) recorded in every checkpoint config. Production would add content-hash tracking via W&B dataset artifacts.
 
-The DeepGlobe dataset is fixed (single version on Kaggle), so formal dataset versioning (DVC, W&B dataset artifacts) is not implemented. However, reproducibility is ensured through:
-- Deterministic train/val split (seed=42, ratio=0.15) recorded in every checkpoint's config
-- The download script always fetches the same dataset version from Kaggle
-- In production, dataset changes would be tracked via content hashing and W&B artifacts, with retraining triggered when the hash changes
-
-### Docker Image and Model Weights
-
-The Docker image does not bake in model weights — they are mounted at runtime via volume:
-```bash
-docker run -p 8000:8000 -v ./models:/app/models ghcr.io/minaessam2015/road-segmentation:latest
-```
-
-This is the production pattern because:
-- Image stays small (~2 GB vs ~2.3 GB with model)
-- Same image works with different model versions (swap the mounted file)
-- Model updates don't require rebuilding or re-pushing the image
-- CI tests download from W&B inside the container for E2E verification
+---
 
 ## License
 
