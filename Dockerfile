@@ -23,7 +23,7 @@ WORKDIR /app
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ libglib2.0-0 libgl1-mesa-glx \
+    gcc g++ libglib2.0-0 libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies first (cached layer)
@@ -37,7 +37,7 @@ WORKDIR /app
 
 # Runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 libgl1-mesa-glx \
+    libglib2.0-0 libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
