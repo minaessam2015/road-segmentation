@@ -305,6 +305,25 @@ pytest tests/test_e2e.py --checkpoint checkpoints/best.pth --onnx models/model_i
 
 ---
 
+## CI/CD Pipeline
+
+The project uses GitHub Actions (`.github/workflows/ci.yml`) with two stages that run on every push to `main`:
+
+**Stage 1 — Code Quality** (runs on every push):
+1. **Lint** (ruff) — enforces consistent code style across `src/`, `tests/`, `scripts/`
+2. **Unit tests** (pytest) — runs the 61 unit tests (e2e tests are skipped in CI since they require model weights)
+3. **Security scan** (pip-audit) — checks all dependencies for known vulnerabilities
+
+**Stage 2 — Docker & Deployment** (runs on push to main, after Stage 1 passes):
+1. **Build Docker image** — verifies the multi-stage Dockerfile builds correctly
+2. **Import verification** — runs all key imports inside the container to catch missing dependencies
+3. **E2E test with real model** — downloads the ONNX model from W&B artifacts inside the container, runs inference on a test image, and verifies the output shape and values
+4. **Push to GHCR** — tags and pushes the verified image to `ghcr.io/minaessam2015/road-segmentation:latest` so the team can pull and run it directly
+
+The pipeline requires a `WANDB_API_KEY` secret in the repository settings (Settings > Secrets > Actions) for the model download step.
+
+---
+
 ## Notebooks
 
 All notebooks run on Google Colab with GPU. Click the badge to open directly.
