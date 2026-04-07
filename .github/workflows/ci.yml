@@ -37,8 +37,7 @@ jobs:
         run: pytest tests/ -v --tb=short --ignore=tests/test_e2e.py
 
       - name: Security scan (pip-audit)
-        run: pip-audit --strict || true
-        continue-on-error: true
+        run: pip-audit --strict
 
   # ---------------------------------------------------------------
   # Stage 2: Docker Build, E2E Test, and Push to GHCR
@@ -107,7 +106,7 @@ jobs:
           assert result['inference_time_ms'] > 0
           print(f'E2E test passed: {result[\"inference_time_ms\"]:.0f}ms, coverage={result[\"road_coverage_pct\"]}%')
           "
-        continue-on-error: true  # don't block if W&B secret not set
+        # Requires WANDB_API_KEY secret in repo settings
 
       # --- Push to GitHub Container Registry ---
       - name: Log in to GHCR
