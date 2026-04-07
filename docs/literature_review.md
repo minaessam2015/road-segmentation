@@ -1,26 +1,16 @@
 # Road Extraction From Satellite Imagery: Literature Review
 
-This note is written for the Hudhud take-home assignment: binary road segmentation from satellite imagery, with optional vectorized output and a production-ready inference API.
-
-The goal is not to summarize every paper in the area. The goal is to identify the highest-value literature for:
-
-- model selection
-- training strategy
-- data preprocessing and augmentation
-- evaluation choices
-- post-processing and vectorization
-- decisions that are strong enough for a practical take-home submission
 
 ## Bottom line
 
-For this assignment, the literature points to a conservative but strong baseline:
+To get a conservative but strong baseline:
 
 1. Start with a U-Net-style encoder-decoder with a pretrained CNN encoder.
-2. Train on crops, not full images, with aggressive geometric and moderate color augmentation.
+2. Train on crops, not full images, with aggressive geometric and moderate color augmentation. **(too slow for my case with no GPU)**
 3. Use a loss that explicitly addresses class imbalance and overlap quality, such as `BCE + Dice` or `BCE + Jaccard/IoU`.
 4. Evaluate with IoU and Dice/F1, not pixel accuracy alone.
-5. Add overlap-aware tiling or full-tile inference plus light post-processing if needed.
-6. Treat vectorization/topology as a separate layer after mask prediction unless graph extraction is the main product requirement.
+5. Add overlap-aware tiling or full-tile inference plus light post-processing if needed. **(check later if I have time)**
+6. Treat vectorization/topology as a separate layer after mask prediction unless graph extraction is the main product requirement. (not very relevant to me also)
 
 That baseline is well supported by both the DeepGlobe challenge literature and general segmentation literature.
 
@@ -445,12 +435,11 @@ If time is limited, read in this order:
 6. [RoadTracer](https://openaccess.thecvf.com/content_cvpr_2018/papers/Bastani_RoadTracer_Automatic_Extraction_CVPR_2018_paper.pdf)
 7. [Mo et al., 2024 survey](https://www.mdpi.com/1424-8220/24/5/1708)
 
-## 12. Recommendation for your implementation
+## 12. Final Roadmap
 
-If I were optimizing for the take-home outcome, I would implement:
 
 - Model: `U-Net` or `D-LinkNet` with a pretrained ResNet encoder
-- Loss: `BCE + Dice` or `BCE + IoU`
+- Loss:  `BCE + IoU` or `BCE + IoU + Boundary_Loss`
 - Data:
   - explicit mask binarization
   - crop-based training
@@ -463,21 +452,9 @@ If I were optimizing for the take-home outcome, I would implement:
   - precision
   - recall
 - Inference:
-  - full tile if memory allows
+  - full tile
   - otherwise sliding windows with overlap
-  - optional TTA behind a flag
-- Output:
-  - mask first
-  - vectorization second
+  - optional TTA behind
 
-That recommendation is partly direct from the literature and partly an engineering inference from it. The inference is deliberate: the highest-probability passing submission is not the most novel paper replica; it is the cleanest end-to-end system built from the most stable ideas in the literature.
 
-## 13. Gaps and future directions worth mentioning in the write-up
 
-- Connectivity remains weaker than raw mask overlap.
-- Label noise and missing minor roads remain significant problems.
-- Domain shift across countries, sensors, and seasons is still a major failure mode.
-- Auxiliary signals such as GPS, OSM priors, SAR, or multi-temporal imagery can help.
-- Weakly supervised and graph-aware methods are promising, but usually add implementation complexity.
-
-These are good points to mention in the “trade-offs / future work” section of the assignment because they show you understand both the model and the product problem.

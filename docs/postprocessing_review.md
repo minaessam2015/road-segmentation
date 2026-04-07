@@ -1,16 +1,7 @@
 # Post-Processing for Road Extraction From Satellite Imagery
 
-This note assumes the segmentation model is already chosen and produces a road probability map or binary mask.
-
-The goal is to answer a practical question:
-
-What post-processing techniques are actually effective for road extraction, and which ones are worth implementing in a time-boxed project?
 
 ## Bottom line
-
-There is no single best post-processing method for all goals.
-
-The most effective choice depends on what you want the output to optimize:
 
 - If you want the best binary mask: threshold tuning, light morphology, and component filtering are the highest-value first steps.
 - If you want a usable centerline or GeoJSON polyline: thresholding + skeletonization + graph cleanup is the standard practical stack.
@@ -398,46 +389,8 @@ Sources:
 - [DeepRoadMapper](https://openaccess.thecvf.com/content_ICCV_2017/papers/Mattyus_DeepRoadMapper_Extracting_Road_ICCV_2017_paper.pdf)
 - [RoadTracer](https://openaccess.thecvf.com/content_cvpr_2018/papers/Bastani_RoadTracer_Automatic_Extraction_CVPR_2018_paper.pdf)
 
-## 12. Recommended order for your project
 
-For the Hudhud take-home, the best sequence is:
 
-### Phase 1
-
-- threshold optimization on validation data
-- remove tiny components
-- optional small closing to fix tiny cracks
-
-### Phase 2
-
-- skeletonize mask
-- build graph / polyline representation
-- prune short branches
-- merge close junctions
-- simplify line geometry
-
-### Phase 3
-
-- if connectivity is still weak, add a conservative gap-bridging or graph-repair step
-
-This gets you the best engineering payoff with the lowest complexity.
-
-## 13. What I would actually implement
-
-If I had a trained model and needed a strong but realistic take-home solution, I would implement:
-
-1. Convert probability map to binary mask using a validation-tuned threshold.
-2. Remove connected components below a small area threshold.
-3. Apply a very small morphological closing if the mask shows tiny local breaks.
-4. Skeletonize the cleaned mask.
-5. Convert the skeleton to a graph.
-6. Prune very short dangling branches.
-7. Merge nearby junction nodes.
-8. Simplify graph edges into polylines.
-
-I would stop there unless the output still had obvious broken connections. If it did, I would add a conservative dead-end connection heuristic inspired by DeepRoadMapper rather than a second learned post-processing network.
-
-That is the highest-probability “good engineering” answer for this assignment.
 
 ## Sources
 
