@@ -1,9 +1,9 @@
 """Build the project presentation as a PPTX file."""
 
 from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
+from pptx.util import Inches, Pt
 
 # Color palette — Ocean/Satellite theme
 NAVY = RGBColor(0x1E, 0x27, 0x61)
