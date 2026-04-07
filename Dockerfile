@@ -61,5 +61,10 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 
 EXPOSE 8000
 
-# Default command — override with specific model path
-CMD ["python", "scripts/serve.py", "--onnx", "models/model.onnx", "--device", "cpu", "--host", "0.0.0.0"]
+# Entrypoint: auto-downloads model from W&B if not mounted
+COPY scripts/entrypoint.sh scripts/entrypoint.sh
+RUN chmod +x scripts/entrypoint.sh
+
+# Default: auto-download + start. Override DEVICE=gpu for GPU serving.
+ENV DEVICE=cpu
+CMD ["scripts/entrypoint.sh"]
