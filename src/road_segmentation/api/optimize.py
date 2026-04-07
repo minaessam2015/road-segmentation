@@ -77,9 +77,10 @@ def export_onnx(
         input_names=["image"],
         output_names=["logits"],
         dynamic_axes={
-            "image": {0: "batch_size", 2: "height", 3: "width"},
-            "logits": {0: "batch_size", 2: "height", 3: "width"},
+            "image": {0: "batch_size"},
+            "logits": {0: "batch_size"},
         },
+        dynamo=False,  # use legacy exporter for compatibility
     )
 
     size_mb = output_path.stat().st_size / 1e6
