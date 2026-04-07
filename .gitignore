@@ -18,6 +18,10 @@ results/
 computer-vision-task.pdf
 notebooks/*_executed.ipynb
 
+wandb/
+test_results/
+test_results_test/
+
 .env
 kaggle.json
 .DS_Store
