@@ -69,18 +69,17 @@ def export_onnx(
 
     dummy_input = torch.randn(1, 3, image_size, image_size)
 
+    # Use legacy TorchScript exporter — the new dynamo exporter fails
+    # on UNet++ due to sympy constraint solving issues with dynamic shapes.
+    # Also disable dynamic spatial dims — we use fixed input size anyway.
     torch.onnx.export(
         model,
         dummy_input,
         str(output_path),
-        opset_version=opset_version,
+        opset_version=max(opset_version, 18),
         input_names=["image"],
         output_names=["logits"],
-        dynamic_axes={
-            "image": {0: "batch_size"},
-            "logits": {0: "batch_size"},
-        },
-        dynamo=False,  # use legacy exporter for compatibility
+        dynamo=False,
     )
 
     size_mb = output_path.stat().st_size / 1e6
