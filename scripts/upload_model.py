@@ -56,7 +56,7 @@ def main() -> None:
     wandb.finish()
 
     print(f"\nUploaded artifact: {args.name}")
-    print(f"Download with: python scripts/download_model.py")
+    print("Download with: python scripts/download_model.py")
 
 
 if __name__ == "__main__":

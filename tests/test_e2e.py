@@ -258,6 +258,7 @@ class TestAPIEndToEnd:
             pytest.skip("No ONNX model available")
 
         from fastapi.testclient import TestClient
+
         from road_segmentation.api.app import create_app
 
         app = create_app(onnx_path=str(onnx_path), device="cpu", results_dir=str(tmp_path / "results"))
