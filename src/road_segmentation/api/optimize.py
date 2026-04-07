@@ -208,8 +208,13 @@ class ONNXInferenceEngine:
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
 
+        # Auto-detect image size from ONNX input shape if not specified
+        input_shape = self.session.get_inputs()[0].shape  # e.g. [1, 3, 1024, 1024]
+        if len(input_shape) == 4 and isinstance(input_shape[2], int) and input_shape[2] > 0:
+            self.image_size = input_shape[2]
+
         active_provider = self.session.get_providers()[0]
-        logger.info(f"ONNX Runtime: {onnx_path} | provider={active_provider}")
+        logger.info(f"ONNX Runtime: {onnx_path} | image_size={self.image_size} | provider={active_provider}")
 
     def predict(self, image_bytes: bytes) -> dict:
         """Run inference on raw image bytes.
