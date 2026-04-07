@@ -49,14 +49,12 @@ jobs:
       - name: Build Docker image
         run: docker build -t road-segmentation:ci .
 
-      - name: Start container (health check only — no model weights)
+      - name: Verify image runs and imports work
         run: |
-          docker run -d --name road-seg-test -p 8000:8000 road-segmentation:ci \
-            python scripts/serve.py --checkpoint /dev/null 2>/dev/null || true
-          sleep 5
-
-      - name: Verify container starts
-        run: docker logs road-seg-test 2>&1 | head -20
-
-      - name: Cleanup
-        run: docker rm -f road-seg-test || true
+          docker run --rm road-segmentation:ci python -c "
+          from road_segmentation.api.app import create_app
+          from road_segmentation.api.optimize import ONNXInferenceEngine
+          from road_segmentation.api.inference import InferenceEngine
+          from road_segmentation.postprocessing.pipeline import run_pipeline
+          print('All imports OK')
+          "
