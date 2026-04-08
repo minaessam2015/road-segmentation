@@ -78,9 +78,15 @@ A sample satellite image is included in the repo for quick testing:
 # Health check
 curl http://localhost:8000/health
 
-# Segment the sample image
+# Segment the sample image (returns JSON with mask_url)
 curl -X POST http://localhost:8000/api/v1/segment \
   -F "image=@tests/fixtures/sample_satellite.jpg" | python -m json.tool
+
+# Download the predicted mask image using mask_url from the response
+MASK_URL=$(curl -s -X POST http://localhost:8000/api/v1/segment \
+  -F "image=@tests/fixtures/sample_satellite.jpg" | python -c "import json,sys; print(json.load(sys.stdin)['mask_url'])")
+curl -o predicted_mask.png "http://localhost:8000${MASK_URL}"
+open predicted_mask.png  # macOS — or xdg-open on Linux
 
 # With GeoJSON road polylines
 curl -X POST "http://localhost:8000/api/v1/segment?return_geojson=true" \
@@ -89,6 +95,8 @@ curl -X POST "http://localhost:8000/api/v1/segment?return_geojson=true" \
 # Prometheus metrics
 curl http://localhost:8000/metrics
 ```
+
+The `mask_url` is served by the same running API. The mask PNG is accessible as long as the container is running. See the [API Reference](#post-apiv1segment) section for full details on the response format and mask retrieval.
 
 ---
 
