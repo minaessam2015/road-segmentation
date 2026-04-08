@@ -4,6 +4,9 @@ Usage:
     # Download latest model (ONNX + checkpoint):
     python scripts/download_model.py
 
+    # Download with explicit API key (no .env needed):
+    python scripts/download_model.py --wandb-key YOUR_KEY
+
     # Download specific version:
     python scripts/download_model.py --version v1
 
@@ -14,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -30,10 +34,24 @@ def main() -> None:
     parser.add_argument("--version", default="latest", help="Artifact version (e.g. v0, v1, latest)")
     parser.add_argument("--output", type=Path, default=PROJECT_ROOT, help="Output base directory")
     parser.add_argument("--onnx-only", action="store_true", help="Download only ONNX models")
+    parser.add_argument("--wandb-key", default=None, help="W&B API key (alternative to .env)")
     args = parser.parse_args()
 
-    from road_segmentation.env import load_env
-    load_env()
+    # Load API key: CLI arg > .env > environment
+    if args.wandb_key:
+        os.environ["WANDB_API_KEY"] = args.wandb_key
+    else:
+        from road_segmentation.env import load_env
+        load_env()
+
+    if not os.environ.get("WANDB_API_KEY"):
+        print("ERROR: W&B API key required. Provide it via one of:")
+        print("  1. python scripts/download_model.py --wandb-key YOUR_KEY")
+        print("  2. Add WANDB_API_KEY=YOUR_KEY to .env file")
+        print("  3. export WANDB_API_KEY=YOUR_KEY")
+        print("")
+        print("Get a free API key at: https://wandb.ai/authorize")
+        sys.exit(1)
 
     import wandb
 
@@ -41,7 +59,6 @@ def main() -> None:
 
     entity = args.entity
     if not entity:
-        import os
         entity = os.environ.get("WANDB_ENTITY", api.default_entity)
 
     artifact_path = f"{entity}/{args.project}/{args.name}:{args.version}"

@@ -129,14 +129,18 @@ Downloads the [DeepGlobe Road Extraction Dataset](https://www.kaggle.com/dataset
 
 ### Download Model Weights
 
-Models are stored in the [W&B Model Registry](https://wandb.ai/minaessam/road-segmentation):
+Models are stored in the [W&B Model Registry](https://wandb.ai/minaessam/road-segmentation). A free W&B API key is required to download ([get one here](https://wandb.ai/authorize)).
 
 ```bash
-# All models (PyTorch checkpoint + ONNX variants):
-python scripts/download_model.py
+# Quickest — pass key directly (no .env needed):
+python scripts/download_model.py --wandb-key YOUR_KEY --onnx-only
 
-# ONNX only (for deployment):
+# Or add to .env for repeated use:
+echo "WANDB_API_KEY=YOUR_KEY" >> .env
 python scripts/download_model.py --onnx-only
+
+# Download everything (checkpoint + all ONNX variants):
+python scripts/download_model.py --wandb-key YOUR_KEY
 ```
 
 ### Run the API
