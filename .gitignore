@@ -26,3 +26,4 @@ test_results_test/
 kaggle.json
 .DS_Store
 *.pdf
+artifacts/

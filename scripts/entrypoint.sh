@@ -2,24 +2,34 @@
 # Docker entrypoint: download model if not present, then start API server.
 #
 # If models/ already has an ONNX file (from volume mount), skip download.
-# Otherwise, download from W&B artifacts (requires WANDB_API_KEY env var).
+# Otherwise, download from Google Drive (no account needed).
 
 set -e
 
 MODEL_DIR="/app/models"
 ONNX_PATTERN="*.onnx"
 
+# Google Drive file IDs
+INT8_ID="1vliNHcQ2fQ13Tk9VRDRPEllmwdoVzN6X"
+FP16_ID="1nLfBITa-yjFZjdf_3XtEQjETn2VWG5lZ"
+
 # Check if any ONNX model already exists
 if ls ${MODEL_DIR}/${ONNX_PATTERN} 1>/dev/null 2>&1; then
     echo "Model found in ${MODEL_DIR}"
 else
-    echo "No model found. Downloading from W&B..."
-    if [ -z "$WANDB_API_KEY" ]; then
-        echo "ERROR: No model files and no WANDB_API_KEY set."
-        echo "Either mount models to /app/models or set WANDB_API_KEY."
-        exit 1
+    echo "No model found. Downloading from Google Drive..."
+    mkdir -p ${MODEL_DIR}
+
+    if [ "${DEVICE:-cpu}" = "cpu" ]; then
+        echo "Downloading INT8 model (21 MB, CPU optimized)..."
+        curl -sL "https://drive.google.com/uc?export=download&id=${INT8_ID}" \
+            -o ${MODEL_DIR}/UnetPlusPlus_efficientnet-b4_int8.onnx
+    else
+        echo "Downloading FP16 model (40 MB, GPU optimized)..."
+        curl -sL "https://drive.google.com/uc?export=download&id=${FP16_ID}" \
+            -o ${MODEL_DIR}/UnetPlusPlus_efficientnet-b4_fp16.onnx
     fi
-    python scripts/download_model.py --onnx-only --output /app
+
     echo "Model downloaded."
 fi
 

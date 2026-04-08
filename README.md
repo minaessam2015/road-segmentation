@@ -32,29 +32,27 @@ End-to-end road extraction system that trains a segmentation model on satellite 
 
 ## Quick Start with Docker
 
-### Option A: Auto-download model (single command)
+### Option A: Single command (model downloads automatically)
+
+```bash
+git clone https://github.com/minaessam2015/road-segmentation.git
+cd road-segmentation
+docker-compose up --build
+```
+
+The entrypoint downloads the model from Google Drive on first start (no account or API key needed). The API will be available at `http://localhost:8000`.
+
+### Option B: Pre-downloaded model
 
 ```bash
 git clone https://github.com/minaessam2015/road-segmentation.git
 cd road-segmentation
 
-# Set your W&B API key (get it from https://wandb.ai/authorize)
-echo "WANDB_API_KEY=your_key_here" > .env
+# Download model (21 MB)
+mkdir -p models
+curl -L "https://drive.google.com/uc?export=download&id=1vliNHcQ2fQ13Tk9VRDRPEllmwdoVzN6X" \
+  -o models/UnetPlusPlus_efficientnet-b4_int8.onnx
 
-# Build and run — model downloads automatically on first start
-docker-compose up --build
-```
-
-The API will be available at `http://localhost:8000`.
-
-### Option B: Pre-downloaded model
-
-```bash
-# Download model first
-pip install wandb
-python scripts/download_model.py --onnx-only
-
-# Run with mounted model
 docker-compose up --build
 ```
 
@@ -63,9 +61,12 @@ docker-compose up --build
 ```bash
 docker pull ghcr.io/minaessam2015/road-segmentation:latest
 
-docker run -p 8000:8000 \
-  -v ./models:/app/models \
-  -e WANDB_API_KEY=your_key \
+# Download model
+mkdir -p models
+curl -L "https://drive.google.com/uc?export=download&id=1vliNHcQ2fQ13Tk9VRDRPEllmwdoVzN6X" \
+  -o models/UnetPlusPlus_efficientnet-b4_int8.onnx
+
+docker run -p 8000:8000 -v ./models:/app/models \
   ghcr.io/minaessam2015/road-segmentation:latest
 ```
 
@@ -130,19 +131,27 @@ Downloads the [DeepGlobe Road Extraction Dataset](https://www.kaggle.com/dataset
 
 ### Download Model Weights
 
-Models are stored in the [W&B Model Registry](https://api.wandb.ai/links/minaessam/6cmg33dd). A free W&B API key is required to download programmatically ([get one here](https://wandb.ai/authorize)).
+**Easiest — direct download from Google Drive (no account needed):**
 
 ```bash
-# Quickest — pass key directly (no .env needed):
-python scripts/download_model.py --wandb-key YOUR_KEY --onnx-only
+mkdir -p models
 
-# Or add to .env for repeated use:
-echo "WANDB_API_KEY=YOUR_KEY" >> .env
-python scripts/download_model.py --onnx-only
+# INT8 model (21 MB, CPU optimized):
+curl -L "https://drive.google.com/uc?export=download&id=1vliNHcQ2fQ13Tk9VRDRPEllmwdoVzN6X" \
+  -o models/UnetPlusPlus_efficientnet-b4_int8.onnx
 
-# Download everything (checkpoint + all ONNX variants):
-python scripts/download_model.py --wandb-key YOUR_KEY
+# FP16 model (40 MB, GPU optimized):
+curl -L "https://drive.google.com/uc?export=download&id=1nLfBITa-yjFZjdf_3XtEQjETn2VWG5lZ" \
+  -o models/UnetPlusPlus_efficientnet-b4_fp16.onnx
 ```
+
+**Alternative — from W&B Model Registry** (requires free [API key](https://wandb.ai/authorize)):
+
+```bash
+python scripts/download_model.py --wandb-key YOUR_KEY --onnx-only
+```
+
+Models are also browsable in the [W&B Model Registry report](https://api.wandb.ai/links/minaessam/6cmg33dd).
 
 ### Run the API
 

@@ -50,12 +50,23 @@ Input image | prediction overlay (red = road) | error map (green = TP, red = FP,
 
 ### Step 4: Data Leakage Analysis
 
-DeepGlobe tiles are cut from larger satellite images, so adjacent tiles in train and val sets may share geographic context (same road continuing across tile boundaries). I analyzed this using two embedding methods:
+DeepGlobe tiles are cut from larger satellite images, so adjacent tiles in train and val sets may share geographic context (same road continuing across tile boundaries). A random train/val split has no way to know which tiles are geographically adjacent, since the dataset provides no coordinate metadata.
 
-- **ResNet50 features** — catches visual near-duplicates (same pixels). Threshold: **0.93** cosine similarity.
-- **CLIP ViT-B/32** — catches semantic similarity (same area, different appearance). Threshold: **0.96** cosine similarity.
+**The intuition:** If two images are from the same geographic area, their visual content should be similar : similar buildings, vegetation, road patterns. By computing embedding vectors for each image and measuring cosine similarity between train and val samples, I can detect pairs that are suspiciously similar and likely come from adjacent or overlapping tiles.
 
-I applied both thresholds to the top-500 highest-IoU samples from each set, then took the union of flagged samples:
+I explored two embedding models to see if they capture different notions of similarity:
+
+- **ResNet50 (ImageNet pretrained)**  a CNN whose features are learned for image classification. Mean pairwise similarity across val-train pairs was **0.45**
+
+- **CLIP ViT-B/32**  a vision transformer trained on image-text pairs via contrastive learning. Mean pairwise similarity was much higher (**0.82**), suggesting CLIP's embedding space clusters satellite images more tightly than ResNet's.
+
+The correlation between the two models' similarity scores was **0.335** — they flag different pairs, which is why I used both. After visually inspecting the most similar pairs at different similarity cutoffs, I chose thresholds where "clearly the same geographic area" transitions to "just similar-looking satellite imagery":
+- **ResNet >= 0.93** — above this, pairs consistently showed the same road structures and building layouts
+- **CLIP >= 0.96** — needed a higher cutoff because CLIP scores were generally higher across all pairs
+
+These thresholds are empirical, not principled — I chose them by looking at the images. The visual evidence is in [notebook 04](notebooks/04_data_leakage_check.ipynb).
+
+To focus the analysis where leakage matters most, I compared only the top-500 highest-IoU samples from each set — if leakage inflates metrics, it would be most visible in the samples where the model performs best. I then took the union of samples flagged by either method:
 
 | | Count | Mean IoU |
 |---|---|---|

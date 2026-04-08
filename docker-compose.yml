@@ -2,13 +2,14 @@
 # Docker Compose for Road Segmentation Service
 # ===========================================================
 #
-# Option A: Auto-download model from W&B (single command):
-#   echo "WANDB_API_KEY=your_key" > .env
-#   docker-compose up
+# Single command — model downloads automatically:
+#   docker-compose up --build
 #
-# Option B: Mount pre-downloaded model:
-#   docker-compose up
-#   (place ONNX files in ./models/ first)
+# Or with pre-downloaded model:
+#   mkdir -p models
+#   curl -L "https://drive.google.com/uc?export=download&id=1vliNHcQ2fQ13Tk9VRDRPEllmwdoVzN6X" \
+#     -o models/UnetPlusPlus_efficientnet-b4_int8.onnx
+#   docker-compose up --build
 #
 # ===========================================================
 
@@ -23,7 +24,6 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - DEVICE=cpu
-      - WANDB_API_KEY=${WANDB_API_KEY:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; r=requests.get('http://localhost:8000/health'); exit(0 if r.ok else 1)"]
       interval: 30s
