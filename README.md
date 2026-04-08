@@ -9,6 +9,7 @@ End-to-end road extraction system that trains a segmentation model on satellite 
 |---|---|
 | **Training Report** | [W&B Report — training curves & metrics](https://api.wandb.ai/links/minaessam/ufwt8pum) |
 | **All Experiments** | [wandb.ai/minaessam/road-segmentation](https://wandb.ai/minaessam/road-segmentation) |
+| **Model Artifacts** | [W&B Model Registry](https://api.wandb.ai/links/minaessam/6cmg33dd) |
 | **Docker Image** | `ghcr.io/minaessam2015/road-segmentation:latest` |
 | **Best Val IoU** | 0.7016 (Dice: 0.8246) |
 | **Inference Latency** | 78 ms (ONNX FP16, T4 GPU) |
@@ -129,7 +130,7 @@ Downloads the [DeepGlobe Road Extraction Dataset](https://www.kaggle.com/dataset
 
 ### Download Model Weights
 
-Models are stored in the [W&B Model Registry](https://wandb.ai/minaessam/road-segmentation). A free W&B API key is required to download ([get one here](https://wandb.ai/authorize)).
+Models are stored in the [W&B Model Registry](https://api.wandb.ai/links/minaessam/6cmg33dd). A free W&B API key is required to download programmatically ([get one here](https://wandb.ai/authorize)).
 
 ```bash
 # Quickest — pass key directly (no .env needed):
