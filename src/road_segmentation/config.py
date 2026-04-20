@@ -231,7 +231,7 @@ def save_config(config: ExperimentConfig, path: Path) -> None:
 # Validation
 # ---------------------------------------------------------------------------
 
-_VALID_LOSS_TYPES = {"bce_dice", "focal_dice", "bce_jaccard", "tversky", "dice", "focal_tversky", "boundary_bce_dice"}
+_VALID_LOSS_TYPES = {"bce_dice", "focal_dice", "bce_jaccard", "tversky", "dice", "focal_tversky", "boundary_bce_dice", "cldice", "cldice_dice", "cldice_bce_dice"}
 _VALID_SCHEDULER_TYPES = {"cosine", "cosine_warm_restarts", "step", "plateau", "one_cycle"}
 _VALID_OPTIMIZER_TYPES = {"adamw", "sgd", "adam"}
 
