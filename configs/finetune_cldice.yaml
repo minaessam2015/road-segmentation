@@ -1,0 +1,123 @@
+# =========================================================
+# Fine-tune with clDice (Centerline Dice) Loss
+# =========================================================
+# Resume from the converged U-Net++ + EfficientNet-B4 checkpoint
+# and fine-tune with a clDice + Dice compound loss.
+#
+# Motivation (from notebooks/08_metric_analysis.ipynb):
+#   - Width-stratified IoU shows the model under-performs on
+#     the narrow bucket (roads ≤ 10 px wide).
+#   - Connectivity analysis shows a non-trivial fraction of GT
+#     components get fragmented (2+ pred pieces).
+#   - Both failure modes share a cause: pixel Dice is dominated
+#     by wide-road mass, so thin-road breaks cost almost nothing.
+#
+# clDice reweights every centerline pixel equally via soft
+# skeletonization (Shit et al., CVPR 2021). A 3-px gap in a
+# residential street now costs the same as a 3-px gap in a
+# highway.
+#
+# The skeletonization radius `iters` must cover the widest road
+# we want centerlined. Our analysis shows thin roads are ≤10 px,
+# so iters=5 (each iteration peels ~2 px of width) is the right
+# default for this dataset.
+#
+# Trade-off to watch:
+#   - Aggregate pixel-IoU may drop slightly (we're intentionally
+#     reweighting the loss toward thin roads).
+#   - The *point* is a bigger gain on the narrow bucket and on
+#     connectivity_fraction. Judge on stratified metrics, not
+#     aggregate.
+#
+# Usage:
+#   1. Set checkpoint.resume_from to your best checkpoint (the
+#      boundary-loss or the base B4-1024 checkpoint).
+#   2. Run 10-15 epochs — we're refining, not training from scratch.
+#   3. Cache predictions to a new directory and re-run notebook 08
+#      against both caches to compare.
+# =========================================================
+
+seed: 42
+
+model:
+  arch: "UnetPlusPlus"
+  encoder_name: "efficientnet-b4"
+  encoder_weights: "imagenet"
+  in_channels: 3
+  classes: 1
+
+data:
+  image_size: 1024
+  batch_size: 32          # clDice is ~2x slower than Dice — halve batch
+  num_workers: 4
+  pin_memory: true
+  val_split_ratio: 0.15
+  val_split_seed: 42
+
+augmentations:
+  train:
+    - name: "HorizontalFlip"
+      params: { p: 0.5 }
+    - name: "VerticalFlip"
+      params: { p: 0.5 }
+    - name: "RandomRotate90"
+      params: { p: 0.5 }
+    - name: "ShiftScaleRotate"
+      params: { shift_limit: 0.1, scale_limit: 0.15, rotate_limit: 45, border_mode: 4, p: 0.5 }
+    - name: "RandomBrightnessContrast"
+      params: { brightness_limit: 0.2, contrast_limit: 0.2, p: 0.3 }
+    - name: "HueSaturationValue"
+      params: { hue_shift_limit: 10, sat_shift_limit: 20, val_shift_limit: 15, p: 0.3 }
+  val: []
+
+normalization:
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+loss:
+  type: "cldice_dice"
+  params:
+    iters: 5              # skeleton radius — covers roads up to ~10 px wide
+    cldice_weight: 0.5    # equal weight with Dice: topology + mass
+    dice_weight: 0.5
+    smooth: 1.0
+    from_logits: true
+
+optimizer:
+  type: "adamw"
+  lr: 5.0e-5              # lower than boundary FT (1e-4) — model is already strong
+  weight_decay: 1.0e-4
+
+scheduler:
+  type: "cosine"
+  params:
+    eta_min: 1.0e-7
+
+training:
+  epochs: 15
+  early_stopping_patience: 7
+  # IMPORTANT: do NOT use val_iou for early stopping here.
+  # Aggregate IoU may plateau/drop while clDice actually helps thin
+  # roads. We want the run to complete unless clDice+Dice loss stops
+  # improving.
+  early_stopping_metric: "val_loss"
+  early_stopping_mode: "min"
+  grad_accumulation_steps: 2     # effective batch ~64 to match baseline
+  mixed_precision: true
+  freeze_encoder_epochs: 0
+  encoder_lr_factor: 0.5
+
+checkpoint:
+  save_dir: "checkpoints"
+  save_best: true
+  save_last: true
+  resume_from: null       # <-- SET to the baseline best.pth on Colab
+
+logging:
+  log_dir: "logs"
+  experiment_name: "unetplusplus_b4_1024_cldice"
+  save_visualizations_every_n_epochs: 3
+  num_visualization_samples: 6
+  tensorboard: false
+  wandb: false
+  save_training_curves: true

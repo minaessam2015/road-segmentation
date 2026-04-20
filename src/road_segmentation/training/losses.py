@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from segmentation_models_pytorch.losses import (
     DiceLoss,
     FocalLoss,
@@ -116,6 +117,111 @@ class BoundaryWeightedBCEDiceLoss(nn.Module):
         return self.bce_weight * bce + self.dice_weight * dice
 
 
+def _soft_erode(x: torch.Tensor) -> torch.Tensor:
+    """Soft morphological erosion via min-pool (separable 3x1 then 1x3).
+
+    min_pool(x) == -max_pool(-x). Separable kernel is equivalent to a 3x3
+    cross-shaped structuring element — enough for centerline extraction.
+    """
+    p1 = -F.max_pool2d(-x, kernel_size=(3, 1), stride=1, padding=(1, 0))
+    p2 = -F.max_pool2d(-x, kernel_size=(1, 3), stride=1, padding=(0, 1))
+    return torch.min(p1, p2)
+
+
+def _soft_dilate(x: torch.Tensor) -> torch.Tensor:
+    """Soft morphological dilation via 3x3 max-pool."""
+    return F.max_pool2d(x, kernel_size=3, stride=1, padding=1)
+
+
+def _soft_open(x: torch.Tensor) -> torch.Tensor:
+    return _soft_dilate(_soft_erode(x))
+
+
+def soft_skeletonize(x: torch.Tensor, iters: int) -> torch.Tensor:
+    """Differentiable skeletonization (Shit et al., CVPR 2021).
+
+    Iteratively peels off one pixel layer per step. For a road of
+    width W pixels, the centerline emerges after ~W/2 iterations.
+
+    Our width analysis shows thin roads are ≤ 10 px wide, so iters=5
+    centerlines every thin road we care about. Larger iters handles
+    wider roads at higher compute cost.
+
+    Args:
+        x:     (N, 1, H, W) sigmoid probabilities or {0,1} targets.
+        iters: number of erosion iterations (radius of the skeleton).
+    """
+    img1 = _soft_open(x)
+    skel = F.relu(x - img1)
+    for _ in range(iters):
+        x = _soft_erode(x)
+        img1 = _soft_open(x)
+        delta = F.relu(x - img1)
+        # Accumulate new skeleton pixels that weren't already in `skel`.
+        skel = skel + F.relu(delta - skel * delta)
+    return skel
+
+
+class CLDiceLoss(nn.Module):
+    """Centerline Dice loss (clDice, Shit et al., CVPR 2021).
+
+    Penalizes topology breaks on thin tubular structures. Pixel-Dice
+    is dominated by wide roads; clDice weights every centerline pixel
+    equally regardless of road width, so a 3-pixel gap in a residential
+    street costs the same as a 3-pixel gap in a highway.
+
+    Two terms, both computed on the soft skeleton:
+        Tprec = |skel(pred) ∩ gt| / |skel(pred)|    (skeleton precision)
+        Tsens = |skel(gt) ∩ pred| / |skel(gt)|      (skeleton recall — the
+                                                     one that punishes breaks)
+        clDice = 1 - 2·Tprec·Tsens / (Tprec + Tsens)
+
+    Args:
+        iters: skeletonization radius. Must cover the widest relevant
+               road (iters ≈ width/2). Default 5 = up to 10 px wide,
+               matching the narrow-bucket cutoff from our width analysis.
+        smooth: numerical stability.
+        from_logits: apply sigmoid to predictions first.
+    """
+
+    def __init__(
+        self,
+        iters: int = 5,
+        smooth: float = 1.0,
+        from_logits: bool = True,
+    ) -> None:
+        super().__init__()
+        self.iters = iters
+        self.smooth = smooth
+        self.from_logits = from_logits
+
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
+        if self.from_logits:
+            y_pred = torch.sigmoid(y_pred)
+
+        # Ensure (N, 1, H, W). SMP/trainer sometimes passes (N, H, W).
+        if y_pred.dim() == 3:
+            y_pred = y_pred.unsqueeze(1)
+        if y_true.dim() == 3:
+            y_true = y_true.unsqueeze(1)
+        y_true = y_true.float()
+
+        skel_pred = soft_skeletonize(y_pred, self.iters)
+        skel_true = soft_skeletonize(y_true, self.iters)
+
+        # Topology precision: predicted skeleton pixels that hit GT mass.
+        tprec = (skel_pred * y_true).sum() + self.smooth
+        tprec = tprec / (skel_pred.sum() + self.smooth)
+
+        # Topology sensitivity: GT skeleton pixels covered by prediction.
+        # This is the term that punishes breaks in thin roads.
+        tsens = (skel_true * y_pred).sum() + self.smooth
+        tsens = tsens / (skel_true.sum() + self.smooth)
+
+        cldice = 2.0 * tprec * tsens / (tprec + tsens)
+        return 1.0 - cldice
+
+
 def create_loss(loss_type: str, params: Dict[str, Any]) -> nn.Module:
     """Create a loss function from config.
 
@@ -178,6 +284,43 @@ def create_loss(loss_type: str, params: Dict[str, Any]) -> nn.Module:
             ),
             weight_a=params.get("focal_weight", 0.5),
             weight_b=params.get("tversky_weight", 0.5),
+        )
+
+    if loss_type == "cldice":
+        return CLDiceLoss(
+            iters=params.get("iters", 5),
+            smooth=params.get("smooth", 1.0),
+            from_logits=from_logits,
+        )
+
+    if loss_type == "cldice_dice":
+        return CompoundLoss(
+            CLDiceLoss(
+                iters=params.get("iters", 5),
+                smooth=smooth,
+                from_logits=from_logits,
+            ),
+            DiceLoss(mode=_MODE, from_logits=from_logits, smooth=smooth),
+            weight_a=params.get("cldice_weight", 0.5),
+            weight_b=params.get("dice_weight", 0.5),
+        )
+
+    if loss_type == "cldice_bce_dice":
+        # clDice for topology + boundary-weighted BCE+Dice for pixel accuracy.
+        return CompoundLoss(
+            CLDiceLoss(
+                iters=params.get("iters", 5),
+                smooth=smooth,
+                from_logits=from_logits,
+            ),
+            CompoundLoss(
+                SoftBCEWithLogitsLoss(),
+                DiceLoss(mode=_MODE, from_logits=from_logits, smooth=smooth),
+                weight_a=params.get("bce_weight", 0.5),
+                weight_b=params.get("dice_weight", 0.5),
+            ),
+            weight_a=params.get("cldice_weight", 0.4),
+            weight_b=params.get("pixel_weight", 0.6),
         )
 
     if loss_type == "boundary_bce_dice":
